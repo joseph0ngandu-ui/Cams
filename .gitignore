@@ -1,0 +1,71 @@
+# Cams — .gitignore
+
+# ── Build artifacts ──────────────────────────────────────────────────────────
+build/
+Build/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+*.module
+*.d
+
+# ── CMake ────────────────────────────────────────────────────────────────────
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing/
+
+# ── Xcode / Apple ────────────────────────────────────────────────────────────
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+.DS_Store
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ── Swift Package Manager ────────────────────────────────────────────────────
+.build/
+.swiftpm/
+*.resolved
+
+# ── CocoaPods (if used) ──────────────────────────────────────────────────────
+Pods/
+*.xcworkspace
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── Windows ──────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Linux ────────────────────────────────────────────────────────────────────
+*~
+
+# ── Compiled / generated source ──────────────────────────────────────────────
+*.class
+*.pyc
+*.pyo
+__pycache__/
