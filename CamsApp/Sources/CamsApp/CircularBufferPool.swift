@@ -88,7 +88,13 @@ public final class CircularBufferPool: @unchecked Sendable {
 
     // MARK: - Public interface
 
-    /// Dequeues a buffer from the pool, waiting up to `timeout` seconds.
+    /// Dequeues a buffer from the pool, waiting up to `timeout` for one to become available.
+    ///
+    /// The default timeout of 33 ms is deliberately conservative (≈ one 30 fps frame interval).
+    /// At 60 fps the display deadline is ~16 ms, but the pool has enough buffers (capacity ≥ 6)
+    /// that a dequeue should return immediately in the steady state. If no buffer is available
+    /// within 33 ms it is safer to drop the frame than to block the capture queue indefinitely,
+    /// which would cause AVCaptureVideoDataOutput to queue frames internally and introduce lag.
     ///
     /// Returns `nil` if no buffer becomes available within the timeout.
     public func dequeue(timeout: DispatchTime = .now() + .milliseconds(33)) -> CVPixelBuffer? {

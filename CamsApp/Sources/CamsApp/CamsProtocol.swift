@@ -24,8 +24,6 @@ public let kCamsVideoPort: UInt16 = 8888
 public let kCamsControlPort: UInt16 = 8889
 /// Wire-format header size in bytes.
 public let kCamsHeaderSize: Int = 17
-/// Magic protocol version tag embedded in the high nibble of `frameType`.
-public let kCamsProtocolVersion: UInt8 = 0x10
 
 // MARK: - Frame Types
 

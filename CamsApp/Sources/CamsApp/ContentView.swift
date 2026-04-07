@@ -92,18 +92,15 @@ final class StreamingViewModel: ObservableObject {
         statusMessage = "Stopped"
     }
 
-    /// Toggles the camera focus lock state.
+    /// Toggles the camera focus lock state on this device.
     func toggleFocusLock() {
         let newLocked = !focusLocked
-        let command: ControlCommand = newLocked ? .lockFocus : .unlockFocus
-        // Apply locally as well as sending the command to the OBS back-channel.
+        let mode: AVCaptureDevice.FocusMode = newLocked ? .locked : .continuousAutoFocus
         if let device = controlChannel.captureDevice {
-            let mode: AVCaptureDevice.FocusMode = newLocked ? .locked : .continuousAutoFocus
             try? device.lockForConfiguration()
             if device.isFocusModeSupported(mode) { device.focusMode = mode }
             device.unlockForConfiguration()
         }
-        _ = command
         focusLocked = newLocked
     }
 

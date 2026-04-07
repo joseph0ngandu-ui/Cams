@@ -76,7 +76,10 @@ bool VideoDecoder::open(FrameType codec) {
     // Enable low-delay decoding.
     m_codecCtx->flags |= AV_CODEC_FLAG_LOW_DELAY;
     m_codecCtx->flags2 |= AV_CODEC_FLAG2_FAST;
-    av_opt_set_int(m_codecCtx, "threads", 1, 0);  // Fewer threads = lower latency.
+    // Allow the decoder to use all available threads for the actual decode work,
+    // but limit frame-level threading to keep per-frame latency predictable.
+    av_opt_set_int(m_codecCtx, "threads", 0, 0);       // 0 = auto (best for throughput).
+    av_opt_set_int(m_codecCtx, "thread_type", FF_THREAD_SLICE, 0); // Slice-level only (lower latency than frame-level).
 
     // Attempt hardware acceleration.
     initHardware(m_codecCtx);

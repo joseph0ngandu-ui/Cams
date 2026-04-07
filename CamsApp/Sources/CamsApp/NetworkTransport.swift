@@ -123,10 +123,9 @@ public final class NetworkTransport: @unchecked Sendable {
                         self.pendingSendCount = max(0, self.pendingSendCount - 1)
                         if let error {
                             // Non-fatal send error; log and continue.
-                            // Fatal connection errors are handled in stateUpdateHandler.
-                            let nsError = error as NSError
-                            guard nsError.domain == NWError.posix(.ECANCELED).localizedDescription
-                            else { return }
+                            // Fatal connection-level errors are handled by stateUpdateHandler.
+                            // Only suppress expected cancellation errors (socket closed deliberately).
+                            if case .posix(let code) = error as? NWError, code == .ECANCELED { return }
                         }
                     }
                 }

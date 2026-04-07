@@ -205,7 +205,7 @@ void NetworkListener::startDiscovery() {
             FD_ZERO(&readfds);
             FD_SET(fd, &readfds);
 
-            timeval tv{1, 0};  // 1-second timeout so we can check m_browsing.
+            timeval tv{0, 200000};  // 200 ms timeout so we can check m_browsing frequently.
             int sel = select(fd + 1, &readfds, nullptr, nullptr, &tv);
             if (sel > 0) {
                 DNSServiceErrorType procErr =
