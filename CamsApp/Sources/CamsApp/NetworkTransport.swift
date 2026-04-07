@@ -121,11 +121,11 @@ public final class NetworkTransport: @unchecked Sendable {
                     guard let self else { return }
                     self.queue.async {
                         self.pendingSendCount = max(0, self.pendingSendCount - 1)
-                        if let error {
-                            // Non-fatal send error; log and continue.
-                            // Fatal connection-level errors are handled by stateUpdateHandler.
-                            // Only suppress expected cancellation errors (socket closed deliberately).
-                            if case .posix(let code) = error as? NWError, code == .ECANCELED { return }
+                        if let nwError = error as? NWError,
+                           case .posix(let posixCode) = nwError,
+                           posixCode == POSIXErrorCode.ECANCELED {
+                            // Socket was cancelled deliberately — not an error condition.
+                            return
                         }
                     }
                 }
