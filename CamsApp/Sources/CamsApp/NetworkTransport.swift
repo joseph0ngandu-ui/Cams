@@ -2,7 +2,7 @@
 // Cams — UDP transport layer using Apple's Network.framework.
 //
 // Features:
-//  • Custom-header packetisation (CamsPacketHeader, 17 bytes).
+//  • Custom-header packetisation (CamsPacketHeader, 21 bytes).
 //  • Backpressure: monitors NWConnection.State and the send-buffer depth.
 //    If the outbound queue reaches `maxQueueDepth`, frames are dropped
 //    (or the encoder's QP is raised via the delegate) rather than
@@ -11,6 +11,66 @@
 
 import Network
 import Foundation
+
+// MARK: - Packetisation
+
+internal enum CamsPacketisationError: Error, Equatable {
+    case invalidFragmentPayloadSize
+    case tooManyFragments(fragmentCount: Int, maxFragments: Int)
+}
+
+internal struct CamsFramePacketizer {
+    static let defaultFragmentPayloadSize = 1200
+
+    private(set) var nextSequenceNumber: UInt32 = 0
+
+    mutating func packetise(
+        data: Data,
+        frameType: FrameType,
+        timestamp: UInt64,
+        fragmentPayloadSize: Int = Self.defaultFragmentPayloadSize
+    ) throws -> [Data] {
+        guard fragmentPayloadSize > 0 else {
+            throw CamsPacketisationError.invalidFragmentPayloadSize
+        }
+
+        let totalFragments = max(1, (data.count + fragmentPayloadSize - 1) / fragmentPayloadSize)
+        guard totalFragments <= Int(kCamsMaxFragmentsPerFrame) else {
+            throw CamsPacketisationError.tooManyFragments(
+                fragmentCount: totalFragments,
+                maxFragments: Int(kCamsMaxFragmentsPerFrame)
+            )
+        }
+
+        let frameSequence = nextSequenceNumber
+        nextSequenceNumber &+= 1
+
+        var packets: [Data] = []
+        packets.reserveCapacity(totalFragments)
+
+        for fragmentIndex in 0..<totalFragments {
+            let offset = fragmentIndex * fragmentPayloadSize
+            let length = min(fragmentPayloadSize, data.count - offset)
+            let payloadRange = offset..<(offset + length)
+            let payload = data.subdata(in: payloadRange)
+
+            let header = CamsPacketHeader(
+                sequenceNumber: frameSequence,
+                timestamp: timestamp,
+                frameType: frameType,
+                fragmentIndex: UInt16(fragmentIndex),
+                fragmentCount: UInt16(totalFragments),
+                payloadLength: UInt32(payload.count)
+            )
+
+            var packet = header.serialise()
+            packet.append(payload)
+            packets.append(packet)
+        }
+
+        return packets
+    }
+}
 
 // MARK: - NetworkTransportDelegate
 
@@ -45,7 +105,7 @@ public final class NetworkTransport: @unchecked Sendable {
 
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "com.cams.networkTransport", qos: .userInteractive)
-    private var sequenceNumber: UInt32 = 0
+    private var packetizer = CamsFramePacketizer()
     private var pendingSendCount: Int = 0
     private var reconnectDelay: TimeInterval = 1.0
     private var reconnectTimer: DispatchSourceTimer?
@@ -99,40 +159,31 @@ public final class NetworkTransport: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self, self.isReady else { return }
 
-            // Backpressure check — drop if buffer is full.
-            if self.pendingSendCount >= self.maxQueueDepth {
-                self.delegate?.transportNeedsBackpressure(self, queueDepth: self.pendingSendCount)
-                return
-            }
-
             let timestamp = camsCurrentTimestampNs()
-            let maxFragmentSize = 1200
-            let totalFragments = max(1, (data.count + maxFragmentSize - 1) / maxFragmentSize)
-            guard totalFragments <= Int(UInt16.max) else {
+            let fragmentPayloadSize = CamsFramePacketizer.defaultFragmentPayloadSize
+            let totalFragments = max(1, (data.count + fragmentPayloadSize - 1) / fragmentPayloadSize)
+
+            guard totalFragments <= Int(kCamsMaxFragmentsPerFrame),
+                  self.pendingSendCount + totalFragments <= self.maxQueueDepth
+            else {
                 self.delegate?.transportNeedsBackpressure(self, queueDepth: self.pendingSendCount)
                 return
             }
 
-            for i in 0..<totalFragments {
-                let offset = i * maxFragmentSize
-                let length = min(maxFragmentSize, data.count - offset)
-                let chunk = data.subdata(in: offset..<(offset + length))
-
-                let seqNum = self.sequenceNumber
-                self.sequenceNumber &+= 1
-
-                let header = CamsPacketHeader(
-                    sequenceNumber: seqNum,
-                    timestamp:      timestamp,
-                    frameType:      frameType,
-                    fragmentIndex:  UInt16(i),
-                    fragmentCount:  UInt16(totalFragments),
-                    payloadLength:  UInt32(chunk.count)
+            let packets: [Data]
+            do {
+                packets = try self.packetizer.packetise(
+                    data: data,
+                    frameType: frameType,
+                    timestamp: timestamp,
+                    fragmentPayloadSize: fragmentPayloadSize
                 )
+            } catch {
+                self.delegate?.transportNeedsBackpressure(self, queueDepth: self.pendingSendCount)
+                return
+            }
 
-                var packet = header.serialise()
-                packet.append(chunk)
-
+            for packet in packets {
                 self.pendingSendCount += 1
                 self.connection?.send(
                     content: packet,
@@ -171,8 +222,9 @@ public final class NetworkTransport: @unchecked Sendable {
         connection = conn
 
         conn.stateUpdateHandler = { [weak self] state in
-            self?.queue.async {
-                self?.handleStateChange(state)
+            guard let transport = self else { return }
+            transport.queue.async {
+                transport.handleStateChange(state)
             }
         }
 

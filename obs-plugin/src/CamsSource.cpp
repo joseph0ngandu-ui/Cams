@@ -59,7 +59,6 @@ static constexpr const char *kSettingBufferMode = "buffer_mode";
 static constexpr const char *kSettingFocusLock  = "focus_lock";
 static constexpr const char *kSettingExpLock    = "exposure_lock";
 static constexpr const char *kSettingQuality    = "quality_mode";
-static constexpr const char *kSettingAudio      = "audio_enabled";
 static constexpr const char *kSettingActivate   = "activate_camera";
 
 // ---------------------------------------------------------------------------
@@ -118,7 +117,6 @@ void CamsSource::getDefaults(obs_data_t *settings) {
     obs_data_set_default_bool(settings, kSettingFocusLock, false);
     obs_data_set_default_bool(settings, kSettingExpLock,   false);
     obs_data_set_default_int(settings, kSettingQuality, 1);
-    obs_data_set_default_bool(settings, kSettingAudio, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +202,6 @@ obs_properties_t *CamsSource::getProperties(void *data) {
     obs_property_list_add_int(qualityList, "Medium (1080p30)", 1);
     obs_property_list_add_int(qualityList, "High (4K60)", 2);
 
-    obs_properties_add_bool(props, kSettingAudio, "Enable Audio (iOS)");
-
     // ── Camera controls ───────────────────────────────────────────────────
     obs_properties_add_button(
         props, kSettingFocusLock, "Toggle Focus Lock",
@@ -245,7 +241,6 @@ void CamsSource::applySettings(obs_data_t *settings) {
     // Auto-activate: when a target is set, send the full activation sequence
     // so the user doesn't need to click a separate "Activate Camera" button.
     m_qualityPreset = static_cast<int>(obs_data_get_int(settings, kSettingQuality));
-    m_audioEnabled  = obs_data_get_bool(settings, kSettingAudio);
 
     activateTarget();
 }
@@ -256,7 +251,6 @@ void CamsSource::activateTarget() {
 
     m_controlServer->setTarget(targetHost, kControlPort);
     m_controlServer->sendQuality(m_qualityPreset);
-    m_controlServer->sendAudioEnabled(m_audioEnabled);
     m_controlServer->sendKeyframeRequest();
     blog(LOG_INFO, "[Cams] Activated target %s:%u", targetHost.c_str(), kControlPort);
 }

@@ -190,100 +190,23 @@ void NetworkListener::receiveLoop() {
             buf.begin() + static_cast<ptrdiff_t>(payloadStart + hdr.payloadLength)
         );
 
-        if (hdr.fragmentCount <= 1) {
-            // Unfragmented or single-fragment mode
+        ReassemblyOutcome outcome;
+        {
+            std::lock_guard<std::mutex> lk(m_assemblyMutex);
+            outcome = m_reassembler.push(hdr, std::move(payload), getCurrentTimeMs());
+        }
+
+        for (const char *reason : outcome.lossReasons) {
+            notifyLoss(reason);
+        }
+
+        if (outcome.packet) {
             PacketCallback cb;
             {
                 std::lock_guard<std::mutex> lk(m_callbackMutex);
                 cb = m_packetCallback;
             }
-            if (cb) cb(hdr, std::move(payload));
-        } else {
-            // Reassembly logic
-            std::vector<uint8_t> fullPayload;
-            PacketHeader fullHeader;
-            bool complete = false;
-
-            bool lossDetected = false;
-            const char *lossReason = nullptr;
-            bool assemblyValid = true;
-
-            {
-                std::lock_guard<std::mutex> lk(m_assemblyMutex);
-                uint64_t now = getCurrentTimeMs();
-
-                // Periodic cleanup of stale fragments (timeout = 1000ms)
-                for (auto it = m_assemblyMap.begin(); it != m_assemblyMap.end(); ) {
-                    if (now - it->second.receiveTimeMs > 1000) {
-                        lossDetected = true;
-                        lossReason = "fragment reassembly timeout";
-                        it = m_assemblyMap.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-
-                auto& assembly = m_assemblyMap[hdr.timestamp];
-                if (assembly.fragments.empty()) {
-                    assembly.timestamp = hdr.timestamp;
-                    assembly.receiveTimeMs = now;
-                    assembly.fragmentCount = hdr.fragmentCount;
-                    assembly.fragments.resize(hdr.fragmentCount);
-                    assembly.header = hdr;
-                } else if (assembly.fragmentCount != hdr.fragmentCount ||
-                           assembly.header.frameType != hdr.frameType) {
-                    m_assemblyMap.erase(hdr.timestamp);
-                    lossDetected = true;
-                    lossReason = "fragment metadata changed";
-                    assemblyValid = false;
-                } else {
-                    // Update receive time to prevent premature timeout
-                    assembly.receiveTimeMs = now;
-                }
-
-                if (!assemblyValid) {
-                    // Metadata conflict already invalidated this partial frame.
-                } else if (assembly.totalExpectedLength + hdr.payloadLength > 16 * 1024 * 1024) {
-                    m_assemblyMap.erase(hdr.timestamp);
-                    lossDetected = true;
-                    lossReason = "reassembled frame too large";
-                } else if (!assembly.fragments[hdr.fragmentIndex].has_value()) {
-                    assembly.fragments[hdr.fragmentIndex] = std::move(payload);
-                    assembly.fragmentsReceived++;
-                    assembly.totalExpectedLength += hdr.payloadLength;
-
-                    if (assembly.fragmentsReceived == assembly.fragmentCount) {
-                        // We have all fragments
-                        fullPayload.reserve(assembly.totalExpectedLength);
-                        for (auto& frag : assembly.fragments) {
-                            if (frag.has_value()) {
-                                fullPayload.insert(fullPayload.end(), frag->begin(), frag->end());
-                            }
-                        }
-
-                        fullHeader = assembly.header;
-                        fullHeader.payloadLength = (uint32_t)fullPayload.size();
-                        fullHeader.fragmentCount = 1;
-                        fullHeader.fragmentIndex = 0;
-
-                        m_assemblyMap.erase(hdr.timestamp);
-                        complete = true;
-                    }
-                }
-            }
-
-            if (lossDetected) {
-                notifyLoss(lossReason);
-            }
-
-            if (complete) {
-                PacketCallback cb;
-                {
-                    std::lock_guard<std::mutex> lk(m_callbackMutex);
-                    cb = m_packetCallback;
-                }
-                if (cb) cb(fullHeader, std::move(fullPayload));
-            }
+            if (cb) cb(outcome.packet->header, std::move(outcome.packet->payload));
         }
     }
 }

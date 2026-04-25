@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  swift-tests:
+  swift-and-ios-build:
     runs-on: macos-latest
     defaults:
       run:
@@ -18,8 +18,20 @@ jobs:
       - name: Swift version
         run: swift --version
 
-      - name: Build
-        run: swift build -c release
-
-      - name: Test
+      - name: Swift protocol and packetisation tests
         run: swift test
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build iOS app
+        run: |
+          xcodebuild \
+            -project Cams.xcodeproj \
+            -scheme Cams \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            build CODE_SIGNING_ALLOWED=NO

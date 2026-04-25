@@ -72,6 +72,37 @@ final class CamsProtocolTests: XCTestCase {
         XCTAssertNil(CamsPacketHeader.deserialise(from: header.serialise()))
     }
 
+    func testHeaderRejectsTooManyFragments() {
+        var data = CamsPacketHeader(
+            sequenceNumber: 7,
+            timestamp: 99,
+            frameType: .keyframe,
+            fragmentIndex: 0,
+            fragmentCount: 1,
+            payloadLength: 1200
+        ).serialise()
+
+        let invalidCount = kCamsMaxFragmentsPerFrame + 1
+        data[15] = UInt8((invalidCount >> 8) & 0xFF)
+        data[16] = UInt8(invalidCount & 0xFF)
+
+        XCTAssertNil(CamsPacketHeader.deserialise(from: data))
+    }
+
+    func testFullPacketDeserialisationValidatesPayloadLength() {
+        let header = CamsPacketHeader(
+            sequenceNumber: 1,
+            timestamp: 2,
+            frameType: .h264,
+            payloadLength: 3
+        )
+        let valid = header.serialise() + Data([0xAA, 0xBB, 0xCC])
+        let invalid = header.serialise() + Data([0xAA, 0xBB])
+
+        XCTAssertEqual(CamsPacket.deserialise(from: valid)?.payload, Data([0xAA, 0xBB, 0xCC]))
+        XCTAssertNil(CamsPacket.deserialise(from: invalid))
+    }
+
     func testAllFrameTypesRoundTrip() {
         let types: [FrameType] = [.h264, .hevc, .parameterSets, .keyframe, .eos]
         for ft in types {
@@ -115,6 +146,86 @@ final class CamsProtocolTests: XCTestCase {
         XCTAssertEqual(data[20], 0x0D)
         XCTAssertEqual(data[18], 0x0B)
         XCTAssertEqual(data[19], 0x0C)
+    }
+
+    // MARK: - Packetisation
+
+    func testPacketizerProducesSingleFragmentForSmallFrame() throws {
+        var packetizer = CamsFramePacketizer()
+        let packets = try packetizer.packetise(
+            data: Data([0x01, 0x02, 0x03]),
+            frameType: .h264,
+            timestamp: 123,
+            fragmentPayloadSize: 1200
+        )
+
+        XCTAssertEqual(packets.count, 1)
+        let packet = CamsPacket.deserialise(from: packets[0])
+        XCTAssertEqual(packet?.header.sequenceNumber, 0)
+        XCTAssertEqual(packet?.header.fragmentIndex, 0)
+        XCTAssertEqual(packet?.header.fragmentCount, 1)
+        XCTAssertEqual(packet?.payload, Data([0x01, 0x02, 0x03]))
+    }
+
+    func testPacketizerFragmentsLargeFrameWithOneFrameSequence() throws {
+        var packetizer = CamsFramePacketizer()
+        let payload = Data((0..<10).map(UInt8.init))
+        let packets = try packetizer.packetise(
+            data: payload,
+            frameType: .hevc,
+            timestamp: 456,
+            fragmentPayloadSize: 4
+        )
+
+        XCTAssertEqual(packets.count, 3)
+        let parsed = packets.compactMap { CamsPacket.deserialise(from: $0) }
+        XCTAssertEqual(parsed.count, 3)
+        XCTAssertEqual(Set(parsed.map { $0.header.sequenceNumber }), Set([UInt32(0)]))
+        XCTAssertEqual(parsed.map { $0.header.fragmentIndex }, [UInt16(0), 1, 2])
+        XCTAssertEqual(parsed.map { $0.header.fragmentCount }, [UInt16(3), 3, 3])
+        XCTAssertEqual(parsed.reduce(Data()) { $0 + $1.payload }, payload)
+    }
+
+    func testPacketizerIncrementsSequencePerFrameNotPerFragment() throws {
+        var packetizer = CamsFramePacketizer()
+        let firstFrame = try packetizer.packetise(
+            data: Data((0..<10).map(UInt8.init)),
+            frameType: .h264,
+            timestamp: 1,
+            fragmentPayloadSize: 4
+        )
+        let secondFrame = try packetizer.packetise(
+            data: Data([0xFF]),
+            frameType: .h264,
+            timestamp: 2,
+            fragmentPayloadSize: 4
+        )
+
+        XCTAssertEqual(CamsPacket.deserialise(from: firstFrame[0])?.header.sequenceNumber, 0)
+        XCTAssertEqual(CamsPacket.deserialise(from: firstFrame[2])?.header.sequenceNumber, 0)
+        XCTAssertEqual(CamsPacket.deserialise(from: secondFrame[0])?.header.sequenceNumber, 1)
+    }
+
+    func testPacketizerRejectsFramesAboveFragmentLimit() {
+        var packetizer = CamsFramePacketizer()
+        let payload = Data(repeating: 0xAB, count: Int(kCamsMaxFragmentsPerFrame) + 1)
+
+        XCTAssertThrowsError(
+            try packetizer.packetise(
+                data: payload,
+                frameType: .h264,
+                timestamp: 1,
+                fragmentPayloadSize: 1
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CamsPacketisationError,
+                .tooManyFragments(
+                    fragmentCount: Int(kCamsMaxFragmentsPerFrame) + 1,
+                    maxFragments: Int(kCamsMaxFragmentsPerFrame)
+                )
+            )
+        }
     }
 
     // MARK: - CamsControlPacket

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <optional>
 #include <vector>
 #ifndef _WIN32
 #include <netdb.h>
@@ -83,19 +84,38 @@ void ControlServer::sendQuality(int qualityPreset) {
     }
 }
 
-void ControlServer::sendAudioEnabled(bool enabled) {
-    sendCommand(ControlCommand::SetAudioEnabled, {static_cast<uint8_t>(enabled ? 1 : 0)});
-}
+std::optional<double> ControlServer::ping(int timeoutMs) {
+    if (m_socket == INVALID_SOCK) return std::nullopt;
 
-double ControlServer::ping(int timeoutMs) {
-    auto t0 = std::chrono::steady_clock::now();
-    sendCommand(ControlCommand::Ping);
+    const auto started = std::chrono::steady_clock::now();
+    uint64_t token = 0;
+    {
+        std::lock_guard<std::mutex> lk(m_pingMutex);
+        token = m_nextPingToken++;
+        m_pendingPings[token] = started;
+    }
 
-    // Wait briefly for a pong (best-effort; no dedicated synchronisation).
-    std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
-    auto t1 = std::chrono::steady_clock::now();
+    sendCommand(ControlCommand::Ping, encodePingToken(token));
 
-    return std::chrono::duration<double, std::milli>(t1 - t0).count();
+    std::unique_lock<std::mutex> lk(m_pingMutex);
+    const bool received = m_pingCV.wait_for(
+        lk,
+        std::chrono::milliseconds(timeoutMs),
+        [this, token] {
+            return m_completedPings.find(token) != m_completedPings.end() ||
+                   m_pendingPings.find(token) == m_pendingPings.end();
+        }
+    );
+
+    if (!received || m_completedPings.find(token) == m_completedPings.end()) {
+        m_pendingPings.erase(token);
+        return std::nullopt;
+    }
+
+    const auto completed = m_completedPings[token];
+    m_completedPings.erase(token);
+    m_pendingPings.erase(token);
+    return std::chrono::duration<double, std::milli>(completed - started).count();
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +148,14 @@ bool ControlServer::createSocket(uint16_t port) {
         m_socket = INVALID_SOCK;
         return false;
     }
+
+    sockaddr_in actualAddr{};
+    socklen_t actualLen = sizeof(actualAddr);
+    if (::getsockname(m_socket, reinterpret_cast<sockaddr *>(&actualAddr), &actualLen) == 0) {
+        m_boundPort = ntohs(actualAddr.sin_port);
+    } else {
+        m_boundPort = port;
+    }
     return true;
 }
 
@@ -136,6 +164,13 @@ void ControlServer::destroySocket() {
         CLOSE_SOCK(m_socket);
         m_socket = INVALID_SOCK;
     }
+    m_boundPort = 0;
+    {
+        std::lock_guard<std::mutex> lk(m_pingMutex);
+        m_pendingPings.clear();
+        m_completedPings.clear();
+    }
+    m_pingCV.notify_all();
 }
 
 void ControlServer::receiveLoop() {
@@ -172,6 +207,8 @@ void ControlServer::receiveLoop() {
                      0,
                      reinterpret_cast<sockaddr *>(&senderAddr),
                      senderLen);
+        } else if (pktOpt->command == ControlCommand::Pong) {
+            handlePong(pktOpt->payload);
         }
     }
 }
@@ -195,6 +232,35 @@ void ControlServer::sendCommand(ControlCommand cmd, const std::vector<uint8_t> &
              0,
              reinterpret_cast<const sockaddr *>(&dest),
              sizeof(dest));
+}
+
+void ControlServer::handlePong(const std::vector<uint8_t> &payload) {
+    auto tokenOpt = decodePingToken(payload);
+    if (!tokenOpt) return;
+
+    std::lock_guard<std::mutex> lk(m_pingMutex);
+    const uint64_t token = *tokenOpt;
+    if (m_pendingPings.find(token) == m_pendingPings.end()) return;
+    m_completedPings[token] = std::chrono::steady_clock::now();
+    m_pingCV.notify_all();
+}
+
+std::vector<uint8_t> ControlServer::encodePingToken(uint64_t token) {
+    std::vector<uint8_t> out(8);
+    for (int i = 7; i >= 0; --i) {
+        out[static_cast<size_t>(7 - i)] = static_cast<uint8_t>((token >> (i * 8)) & 0xFF);
+    }
+    return out;
+}
+
+std::optional<uint64_t> ControlServer::decodePingToken(const std::vector<uint8_t> &payload) {
+    if (payload.size() < 8) return std::nullopt;
+
+    uint64_t token = 0;
+    for (size_t i = 0; i < 8; ++i) {
+        token = (token << 8) | payload[i];
+    }
+    return token;
 }
 
 bool ControlServer::resolveIPv4Target(const std::string &host, uint16_t port, sockaddr_in &out) {

@@ -78,7 +78,6 @@ private:
     std::string m_manualHost;
     BufferMode  m_bufferMode = BufferMode::Stable;
     int         m_qualityPreset = 2; // 0 low, 1 medium, 2 high
-    bool        m_audioEnabled = false;
 
     // ── OBS frame output ─────────────────────────────────────────────────
     obs_source_frame m_obsFrame{};

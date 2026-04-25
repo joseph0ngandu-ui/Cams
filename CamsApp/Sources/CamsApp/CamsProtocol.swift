@@ -3,12 +3,13 @@
 //
 // Packet wire format (big-endian):
 //  ┌────────────────────┬────────────────────┬────────────────────┬────────────────────┐
-//  │  Sequence Number   │     Timestamp      │   Frame Type (1)   │  Payload Length    │
-//  │     4 bytes        │     8 bytes        │                    │     4 bytes        │
+//  │  Frame Sequence    │     Timestamp      │   Frame Type (1)   │  Fragment Index    │
+//  │     4 bytes        │     8 bytes        │                    │     2 bytes        │
 //  ├────────────────────┴────────────────────┴────────────────────┴────────────────────┤
-//  │                          Payload (variable length)                                │
+//  │ Fragment Count (2) │ Payload Length (4) │ Payload (variable length)                │
 //  └───────────────────────────────────────────────────────────────────────────────────┘
-// Total header size: 17 bytes.
+// Total header size: 21 bytes. All fragments for one encoded frame share the
+// same sequence number.
 //
 // Control back-channel (port 8889) uses a separate lightweight command structure.
 
@@ -24,6 +25,8 @@ public let kCamsVideoPort: UInt16 = 8888
 public let kCamsControlPort: UInt16 = 8889
 /// Wire-format header size in bytes.
 public let kCamsHeaderSize: Int = 21
+/// Maximum fragments accepted for one encoded frame.
+public let kCamsMaxFragmentsPerFrame: UInt16 = 1024
 
 // MARK: - Frame Types
 
@@ -37,7 +40,7 @@ public enum FrameType: UInt8, Sendable {
     case parameterSets = 0x03
     /// Keyframe (IDR) marker — same codec as the current session.
     case keyframe  = 0x04
-    /// Raw PCM audio payload.
+    /// Reserved for future audio transport; video-only v1 does not emit this payload.
     case audioPCM  = 0x10
     /// End-of-stream signal.
     case eos       = 0xFF
@@ -72,7 +75,7 @@ public enum ControlCommand: UInt8, Sendable {
     case setQualityMedium = 0x07
     /// Switch to high quality preset.
     case setQualityHigh  = 0x08
-    /// Enable/disable audio transport.
+    /// Reserved for future audio transport; ignored by video-only v1.
     case setAudioEnabled = 0x09
     /// Ping — used to measure round-trip latency.
     case ping          = 0xFE
@@ -85,6 +88,7 @@ public enum ControlCommand: UInt8, Sendable {
 /// A strongly-typed, zero-copy view over a serialised Cams packet header.
 public struct CamsPacketHeader: Sendable {
     // Raw field storage — all values are in host byte order after parsing.
+    // sequenceNumber identifies an encoded frame, not an individual fragment.
     public let sequenceNumber: UInt32
     public let timestamp: UInt64
     public let frameType: FrameType
@@ -174,7 +178,10 @@ public struct CamsPacketHeader: Sendable {
             UInt32(bytes[20])
 
         guard let frameType = FrameType(rawValue: ftByte) else { return nil }
-        guard fCountBE > 0, fIndexBE < fCountBE else { return nil }
+        guard fCountBE > 0,
+              fIndexBE < fCountBE,
+              fCountBE <= kCamsMaxFragmentsPerFrame
+        else { return nil }
 
         return CamsPacketHeader(
             sequenceNumber: seqBE,
@@ -183,6 +190,29 @@ public struct CamsPacketHeader: Sendable {
             fragmentIndex:  fIndexBE,
             fragmentCount:  fCountBE,
             payloadLength:  lenBE
+        )
+    }
+}
+
+// MARK: - CamsPacket
+
+/// A validated complete Cams datagram.
+public struct CamsPacket: Sendable {
+    public let header: CamsPacketHeader
+    public let payload: Data
+
+    /// Parses a full datagram and validates that the declared payload length
+    /// matches the bytes after the fixed header.
+    public static func deserialise(from data: Data) -> CamsPacket? {
+        guard let header = CamsPacketHeader.deserialise(from: data) else {
+            return nil
+        }
+        let payloadStart = kCamsHeaderSize
+        let payloadEnd = payloadStart + Int(header.payloadLength)
+        guard data.count == payloadEnd else { return nil }
+        return CamsPacket(
+            header: header,
+            payload: Data(data[payloadStart..<payloadEnd])
         )
     }
 }

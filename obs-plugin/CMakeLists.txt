@@ -139,6 +139,7 @@ if(BUILD_PLUGIN)
 set(CAMS_SOURCES
     src/plugin-main.cpp
     src/CamsSource.cpp
+    src/FrameReassembler.cpp
     src/JitterBuffer.cpp
     src/NetworkListener.cpp
     src/VideoDecoder.cpp
@@ -148,6 +149,7 @@ set(CAMS_SOURCES
 set(CAMS_HEADERS
     src/CamsPacket.h
     src/CamsSource.h
+    src/FrameReassembler.h
     src/JitterBuffer.h
     src/NetworkListener.h
     src/VideoDecoder.h
@@ -262,9 +264,14 @@ if(BUILD_TESTS)
     enable_testing()
     add_executable(cams_tests
         tests/JitterBufferTest.cpp
+        src/ControlServer.cpp
+        src/FrameReassembler.cpp
         src/JitterBuffer.cpp
     )
     target_include_directories(cams_tests PRIVATE src)
     target_compile_features(cams_tests PRIVATE cxx_std_17)
+    if(WIN32)
+        target_link_libraries(cams_tests PRIVATE ws2_32)
+    endif()
     add_test(NAME cams_tests COMMAND cams_tests)
 endif()

@@ -52,7 +52,6 @@ final class StreamingViewModel: ObservableObject {
     @Published var focusLocked = false
     @Published var exposureLocked = false
     @Published var selectedQuality: StreamQuality = .high
-    @Published var audioEnabled = false
     @Published var localIPAddress = "-"
     @Published var localVideoPort: UInt16 = kCamsVideoPort
     @Published var localControlPort: UInt16 = kCamsControlPort
@@ -148,11 +147,6 @@ final class StreamingViewModel: ObservableObject {
         capture?.updateEncoderConfiguration(quality.encoderConfig)
         capture?.requestKeyframe()
         statusMessage = "Quality set to \(quality.rawValue)"
-    }
-
-    func setAudioEnabled(_ enabled: Bool) {
-        audioEnabled = enabled
-        statusMessage = enabled ? "Audio requested; video stream stays active" : "Audio disabled"
     }
 
     func toggleFocusLock() {
@@ -311,12 +305,6 @@ extension StreamingViewModel: ControlChannelDelegate {
         }
     }
 
-    nonisolated func controlChannel(_ channel: ControlChannel, didRequestAudioEnabled enabled: Bool) {
-        Task { @MainActor in
-            self.setAudioEnabled(enabled)
-        }
-    }
-
     nonisolated func controlChannel(_ channel: ControlChannel, didFailWithError error: Error) {
         Task { @MainActor in
             self.statusMessage = "Control error: \(error.localizedDescription)"
@@ -456,9 +444,6 @@ private struct ControlDock: View {
                     viewModel.toggleExposureLock()
                 }
 
-                IconToggleButton(systemImage: viewModel.audioEnabled ? "mic.fill" : "mic.slash.fill", title: "Audio", isActive: viewModel.audioEnabled) {
-                    viewModel.setAudioEnabled(!viewModel.audioEnabled)
-                }
             }
         }
         .padding(14)

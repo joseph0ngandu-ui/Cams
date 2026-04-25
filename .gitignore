@@ -2,6 +2,8 @@
 
 # ── Build artifacts ──────────────────────────────────────────────────────────
 build/
+build-*/
+build-plugin/
 Build/
 cmake-build-*/
 *.o
@@ -15,6 +17,7 @@ cmake-build-*/
 *.d
 
 # ── CMake ────────────────────────────────────────────────────────────────────
+.deps/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake

@@ -70,7 +70,7 @@ static constexpr size_t   kHeaderSize  = 21;
 /// Largest UDP payload accepted by the receiver after the Cams header.
 static constexpr size_t   kMaxDatagramPayloadSize = 65536 - kHeaderSize;
 /// Defensive cap on fragments per encoded frame.
-static constexpr uint16_t kMaxFragments = 256;
+static constexpr uint16_t kMaxFragments = 1024;
 
 // ---------------------------------------------------------------------------
 // Frame Types
@@ -81,7 +81,7 @@ enum class FrameType : uint8_t {
     HEVC          = 0x02,
     ParameterSets = 0x03,
     Keyframe      = 0x04,
-    AudioPCM      = 0x10,
+    AudioPCM      = 0x10, ///< Reserved for future audio transport.
     EndOfStream   = 0xFF,
 };
 
@@ -111,7 +111,7 @@ enum class ControlCommand : uint8_t {
     SetQualityLow    = 0x06,
     SetQualityMedium = 0x07,
     SetQualityHigh   = 0x08,
-    SetAudioEnabled  = 0x09,
+    SetAudioEnabled  = 0x09, ///< Reserved for future audio transport.
     Ping             = 0xFE,
     Pong             = 0xFF,
 };
@@ -122,7 +122,7 @@ enum class ControlCommand : uint8_t {
 
 /// Strongly-typed representation of a Cams packet header.
 struct PacketHeader {
-    uint32_t  sequenceNumber;  ///< Monotonically increasing frame counter.
+    uint32_t  sequenceNumber;  ///< Monotonically increasing encoded-frame counter.
     uint64_t  timestamp;       ///< Capture timestamp in nanoseconds.
     FrameType frameType;       ///< Content type of the enclosed payload.
     uint16_t  fragmentIndex;   ///< Fragment index (0-based).

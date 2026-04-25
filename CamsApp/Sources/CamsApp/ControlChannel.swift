@@ -23,8 +23,6 @@ public protocol ControlChannelDelegate: AnyObject, Sendable {
     func controlChannelDidRequestKeyframe(_ channel: ControlChannel)
     /// The OBS plugin has requested a video quality preset.
     func controlChannel(_ channel: ControlChannel, didRequestQuality quality: StreamQuality)
-    /// The OBS plugin has requested that audio capture be enabled or disabled.
-    func controlChannel(_ channel: ControlChannel, didRequestAudioEnabled enabled: Bool)
     /// The OBS plugin has sent a control packet, revealing its host endpoint.
     func controlChannel(_ channel: ControlChannel, didDiscoverOBSEndpoint host: String, port: UInt16)
     /// A control command failed locally before it could be applied.
@@ -194,8 +192,8 @@ public final class ControlChannel: @unchecked Sendable {
             delegate?.controlChannel(self, didRequestQuality: .high)
 
         case .setAudioEnabled:
-            let enabled = packet.payload.first.map { $0 != 0 } ?? true
-            delegate?.controlChannel(self, didRequestAudioEnabled: enabled)
+            // Reserved for a future audio-capable protocol revision.
+            break
 
         case .ping:
             // Reply with a pong on the same connection.

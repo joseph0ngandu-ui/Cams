@@ -7,8 +7,8 @@
 // Key design decisions:
 //  • Uses `.userInteractive` DispatchQueue for the sample buffer callback to
 //    minimise latency on the capture path.
-//  • Feeds CVPixelBuffers directly to VTCompressionSession via the encoder
-//    without any intermediate conversion.
+//  • Feeds AVCapture CVPixelBuffers directly to VTCompressionSession via the
+//    encoder without any intermediate conversion.
 //  • On thermal throttling (ThermalStateSerious/Critical) the encoder bitrate
 //    is automatically halved to reduce heat generation.
 
@@ -48,8 +48,6 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
     // MARK: Private state
 
     private let avSession = AVCaptureSession()
-    private let bufferPool: CircularBufferPool?
-
     // .userInteractive ensures the callback executes at maximum priority.
     private let captureQueue = DispatchQueue(
         label: "com.cams.capture",
@@ -74,12 +72,6 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
         self.encoder       = VideoEncoder(configuration: encoderConfig)
         self.transport     = transport
 
-        // Pre-allocate a small pool of reusable pixel buffers.
-        self.bufferPool = try? CircularBufferPool(
-            capacity: 6,
-            width:    encoderConfig.width,
-            height:   encoderConfig.height
-        )
         super.init()
         encoder.delegate = self
         transport.delegate = self

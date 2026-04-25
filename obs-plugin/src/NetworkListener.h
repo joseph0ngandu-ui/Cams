@@ -12,6 +12,7 @@
 #pragma once
 
 #include "CamsPacket.h"
+#include "FrameReassembler.h"
 #include "JitterBuffer.h"
 
 #include <atomic>
@@ -20,9 +21,7 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <unordered_map>
 #include <chrono>
-#include <optional>
 
 // POSIX sockets
 #ifdef _WIN32
@@ -124,19 +123,8 @@ private:
     mutable std::mutex m_callbackMutex;
     std::atomic<uint64_t> m_invalidPacketCount{0};
 
-    // ── Frame Reassembly ──────────────────────────────────────────────────
-    struct FrameAssembly {
-        uint64_t timestamp = 0;
-        uint64_t receiveTimeMs = 0;
-        uint16_t fragmentCount = 0;
-        uint16_t fragmentsReceived = 0;
-        size_t totalExpectedLength = 0;
-        std::vector<std::optional<std::vector<uint8_t>>> fragments;
-        PacketHeader header{};
-    };
-
     mutable std::mutex m_assemblyMutex;
-    std::unordered_map<uint64_t, FrameAssembly> m_assemblyMap;
+    FrameReassembler m_reassembler;
 
     void receiveLoop();
     bool createSocket(uint16_t port);

@@ -9,9 +9,14 @@
 #include "CamsPacket.h"
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <vector>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -49,6 +54,7 @@ public:
     void stop();
 
     bool isRunning() const { return m_running.load(); }
+    uint16_t boundPort() const { return m_boundPort; }
 
     // -----------------------------------------------------------------------
     // Targeting
@@ -69,17 +75,16 @@ public:
     void sendKeyframeRequest();
     /// Requests a quality preset change on the iOS app.
     void sendQuality(int qualityPreset);
-    /// Enables/disables audio transport from iOS.
-    void sendAudioEnabled(bool enabled);
 
     /// Sends a ping and returns the round-trip latency in milliseconds.
     /// Blocks for up to `timeoutMs` milliseconds.
-    double ping(int timeoutMs = 500);
+    std::optional<double> ping(int timeoutMs = 500);
 
 private:
     socket_t          m_socket      = INVALID_SOCK;
     std::atomic<bool> m_running{false};
     std::thread       m_recvThread;
+    uint16_t          m_boundPort = 0;
 
     std::string       m_targetHost;
     uint16_t          m_targetPort  = kControlPort;
@@ -87,10 +92,19 @@ private:
     bool              m_targetResolved = false;
     mutable std::mutex m_targetMutex;
 
+    std::mutex m_pingMutex;
+    std::condition_variable m_pingCV;
+    uint64_t m_nextPingToken = 1;
+    std::unordered_map<uint64_t, std::chrono::steady_clock::time_point> m_pendingPings;
+    std::unordered_map<uint64_t, std::chrono::steady_clock::time_point> m_completedPings;
+
     bool createSocket(uint16_t port);
     void destroySocket();
     void receiveLoop();
     void sendCommand(ControlCommand cmd, const std::vector<uint8_t> &payload = {});
+    void handlePong(const std::vector<uint8_t> &payload);
+    static std::vector<uint8_t> encodePingToken(uint64_t token);
+    static std::optional<uint64_t> decodePingToken(const std::vector<uint8_t> &payload);
     static bool resolveIPv4Target(const std::string &host, uint16_t port, sockaddr_in &out);
 };
 

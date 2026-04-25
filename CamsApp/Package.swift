@@ -9,7 +9,8 @@ import PackageDescription
 let package = Package(
     name: "CamsApp",
     platforms: [
-        .iOS(.v16)
+        .iOS(.v16),
+        .macOS(.v10_14)
     ],
     products: [
         .library(
@@ -19,13 +20,23 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
-        // Core library containing all streaming logic — importable for unit tests.
+        // Core protocol/transport packetisation logic — importable for unit tests.
         .target(
             name: "CamsCore",
             dependencies: [],
             path: "Sources/CamsApp",
+            exclude: [
+                "BonjourPublisher.swift",
+                "CamsApp.swift",
+                "CaptureSession.swift",
+                "CircularBufferPool.swift",
+                "ContentView.swift",
+                "ControlChannel.swift",
+                "VideoEncoder.swift"
+            ],
             sources: [
-                "CamsProtocol.swift"
+                "CamsProtocol.swift",
+                "NetworkTransport.swift"
             ],
             swiftSettings: [
                 // Enable strict concurrency checking to catch data-race issues at compile time.

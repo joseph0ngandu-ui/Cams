@@ -1,8 +1,10 @@
 # Cams
 
-**High-performance iOS-to-OBS camera streaming ecosystem over a custom UDP protocol.**
+**Video-only iOS-to-OBS camera streaming over a custom UDP protocol.**
 
-Cams turns an iPhone or iPad into a low-latency, high-quality video source for [OBS Studio](https://obsproject.com). It streams up to 4K/60fps HEVC (H.265) or H.264 video directly from the iOS camera to OBS over Wi-Fi with sub-100ms glass-to-glass latency, using a custom UDP transport rather than RTSP or HTTP.
+Cams turns an iPhone or iPad into a high-quality video source for [OBS Studio](https://obsproject.com). It streams HEVC (H.265) or H.264 video directly from the iOS camera to OBS over Wi-Fi using a custom UDP transport rather than RTSP or HTTP.
+
+> Status: video-only v1. Audio transport is reserved for a future protocol revision, and latency claims should be based on measured release-checklist results for the tested device/network.
 
 ---
 
@@ -39,8 +41,8 @@ Cams turns an iPhone or iPad into a low-latency, high-quality video source for [
 │      │ CMSampleBuffer                                                      │
 │      ▼                                                                     │
 │  NetworkTransport (NWConnection / UDP)                                     │
-│      │  Cams Packet: [Seq(4)|TS(8)|FT(1)|Len(4)|NAL Payload]              │
-│      │  Backpressure: drop / lower QP when isReady = false                 │
+│      │  Cams Packet: [Seq(4)|TS(8)|FT(1)|Frag(4)|Len(4)|NAL Payload]      │
+│      │  Backpressure: drop whole encoded frames when queue is full         │
 │      ▼                                                                     │
 │  Wi-Fi UDP → port 8888                                                     │
 │                                                                            │
@@ -77,12 +79,12 @@ Cams turns an iPhone or iPad into a low-latency, high-quality video source for [
 | **Codec** | HEVC (H.265) Main; automatic H.264 High fallback |
 | **Bitrate** | CBR; configurable up to 50 Mbps for 4K |
 | **Latency** | `kVTCompressionPropertyKey_RealTime = true`, `MaxFrameDelayCount = 0` |
-| **Memory** | Circular pixel-buffer pool — zero heap allocation on the capture hot-path |
-| **Congestion control** | Monitors `NWConnection` send-queue depth; drops frames / reduces QP on backpressure |
+| **Capture path** | `AVCaptureVideoDataOutput` CVPixelBuffers are submitted directly to VideoToolbox |
+| **Congestion control** | Monitors `NWConnection` send-queue depth; drops whole encoded frames on backpressure |
 | **Discovery** | Bonjour (`_cams-video._udp`) — zero configuration |
 | **Jitter buffer** | Fixed-latency 0-frame (low latency) or 3-frame (stable) mode |
 | **HW decode** | VideoToolbox (macOS), D3D11VA / CUDA (Windows), VAAPI / CUDA (Linux) |
-| **Control** | UDP back-channel: focus lock, exposure lock, keyframe request, ping/pong |
+| **Control** | UDP back-channel: focus lock, exposure lock, keyframe request, token-based ping/pong |
 | **Thermal** | Encoder bitrate automatically halved / quartered under thermal pressure |
 
 ---
@@ -92,10 +94,11 @@ Cams turns an iPhone or iPad into a low-latency, high-quality video source for [
 ```
 Cams/
 ├── CamsApp/                     # iOS application (Swift)
-│   ├── Package.swift            # Swift Package Manager manifest
+│   ├── Package.swift            # SwiftPM protocol/transport unit-test manifest
+│   ├── project.yml              # XcodeGen project source of truth
 │   ├── Sources/CamsApp/
 │   │   ├── CamsProtocol.swift   # Packet header + control command definitions
-│   │   ├── CircularBufferPool.swift  # Zero-copy pixel buffer pool
+│   │   ├── CircularBufferPool.swift  # Reserved helper; not active in video v1 capture path
 │   │   ├── VideoEncoder.swift   # VideoToolbox encoder (HEVC / H.264, CBR)
 │   │   ├── NetworkTransport.swift    # NWConnection UDP sender + backpressure
 │   │   ├── BonjourPublisher.swift    # NWListener Bonjour advertisement
@@ -110,7 +113,8 @@ Cams/
 │   ├── CMakeLists.txt           # Complete build system
 │   ├── src/
 │   │   ├── CamsPacket.h         # Packet definitions (mirrors CamsProtocol.swift)
-│   │   ├── JitterBuffer.h/.cpp  # Fixed-latency reordering buffer
+│   │   ├── FrameReassembler.h/.cpp # UDP fragment reassembly
+│   │   ├── JitterBuffer.h/.cpp  # Fixed-latency frame reordering buffer
 │   │   ├── NetworkListener.h/.cpp   # UDP socket + Bonjour browser
 │   │   ├── VideoDecoder.h/.cpp  # FFmpeg hardware-accelerated decoder
 │   │   ├── ControlServer.h/.cpp # UDP control back-channel server
@@ -136,24 +140,32 @@ Cams/
 
 ### Building
 
-**Using Swift Package Manager (command line):**
+**Run Swift unit tests (protocol + packetisation core):**
 
 ```bash
 cd CamsApp
-swift build -c release
+swift test
 ```
 
-**Using Xcode:**
+**Build the iOS app from the generated Xcode project:**
 
-1. Open `CamsApp/Package.swift` in Xcode.
-2. Select your iOS device as the run destination.
-3. Build and run (`⌘R`).
+```bash
+cd CamsApp
+xcodegen generate
+xcodebuild -project Cams.xcodeproj \
+    -scheme Cams \
+    -configuration Debug \
+    -destination 'generic/platform=iOS' \
+    build CODE_SIGNING_ALLOWED=NO
+```
+
+`project.yml` is the tracked source of truth. Generated `.xcodeproj` files are ignored.
 
 > **Note:** The app requires camera and local network permissions. These must be accepted at runtime.
 
 ### Protocol Specification
 
-Every UDP datagram sent from the iOS app to OBS begins with a 17-byte header:
+Every UDP datagram sent from the iOS app to OBS begins with a 21-byte header:
 
 ```
  0               1               2               3
@@ -165,9 +177,9 @@ Every UDP datagram sent from the iOS app to OBS begins with a 17-byte header:
 │                      Timestamp (64-bit, ns)                       │  bytes 4–11
 │                                                                   │
 ├───────────────────────────────────────────────────────────────────┤
-│  Frame Type (8-bit)  │                                            │  byte  12
-├──────────────────────┘                                            │
-│                     Payload Length (32-bit)                       │  bytes 13–16
+│  Frame Type (8-bit)  │ Fragment Index (16-bit)                    │  bytes 12–14
+├──────────────────────┴────────────────────────────────────────────┤
+│ Fragment Count (16-bit)   │ Payload Length (32-bit)               │  bytes 15–20
 ├───────────────────────────────────────────────────────────────────┤
 │                      Payload (variable)                           │
 └───────────────────────────────────────────────────────────────────┘
@@ -181,7 +193,10 @@ All multi-byte fields are **big-endian** (network byte order).
 | HEVC | `0x02` | HEVC NAL unit(s) |
 | ParameterSets | `0x03` | SPS / PPS / VPS |
 | Keyframe | `0x04` | IDR frame |
+| AudioPCM | `0x10` | Reserved; not emitted in video-only v1 |
 | EndOfStream | `0xFF` | Session termination |
+
+`Sequence Number` identifies the encoded frame. All fragments for the same encoded frame share the same sequence number, timestamp, and frame type.
 
 ---
 
@@ -256,6 +271,7 @@ Once the plugin is installed and OBS is restarted, add a **Cams iOS Camera** sou
 | **iOS Device** | Dropdown populated with Bonjour-discovered Cams devices on the local network |
 | **Refresh Devices** | Re-scans for Bonjour services |
 | **Buffer Mode** | *Low Latency* (0-frame pass-through) or *Stable* (3-frame reordering jitter buffer) |
+| **Video Quality** | Requests Low (720p30), Medium (1080p30), or High (4K60) from the iOS app |
 | **Toggle Focus Lock** | Sends a `lockFocus` / `unlockFocus` command to the iOS device |
 | **Toggle Exposure Lock** | Sends a `lockExposure` / `unlockExposure` command to the iOS device |
 
@@ -275,7 +291,7 @@ Ensure your firewall and Wi-Fi router allow UDP traffic on both ports within you
 ## Performance Notes
 
 - **ARM64 (Apple Silicon):** The CMakeLists.txt compiles a universal binary (`arm64;x86_64`) on macOS. VideoToolbox hardware encode/decode runs natively on the ANE/Media Engine.
-- **Zero-copy capture:** `CVPixelBuffer` objects from `AVCaptureVideoDataOutput` are submitted directly to `VTCompressionSession` without intermediate copies. The `CircularBufferPool` pre-allocates buffers to eliminate per-frame heap allocation.
+- **Direct capture path:** `CVPixelBuffer` objects from `AVCaptureVideoDataOutput` are submitted directly to `VTCompressionSession` without intermediate copies.
 - **Backpressure:** If the OBS host cannot consume frames fast enough, `NetworkTransport` drops frames rather than buffering them. This prevents latency from accumulating over time ("skipping" behaviour).
 - **Thermal throttling:** The iOS app monitors `ProcessInfo.thermalState` and reduces the encoder bitrate to 50% (Serious) or 25% (Critical) of the nominal setting.
 - **Jitter buffer latency budget:**
@@ -291,9 +307,14 @@ Ensure your firewall and Wi-Fi router allow UDP traffic on both ports within you
 3. Commit your changes with clear messages.
 4. Ensure all tests pass:
    ```bash
+   # Swift protocol/packetisation tests
+   (cd CamsApp && swift test)
+
+   # iOS app build
+   (cd CamsApp && xcodegen generate && xcodebuild -project Cams.xcodeproj -scheme Cams -configuration Debug -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO)
+
    # OBS plugin unit tests
-   cmake -B build -DBUILD_PLUGIN=OFF -DBUILD_TESTS=ON
-   cmake --build build && ctest --test-dir build
+   (cd obs-plugin && cmake -S . -B build -DBUILD_PLUGIN=OFF -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release && cmake --build build && ctest --test-dir build)
    ```
 5. Open a pull request.
 

@@ -227,6 +227,7 @@ src/ControlServer.o: src/ControlServer.cpp.o
 # target to build an object file
 src/ControlServer.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/obs-cams.dir/build.make CMakeFiles/obs-cams.dir/src/ControlServer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cams_tests.dir/build.make CMakeFiles/cams_tests.dir/src/ControlServer.cpp.o
 .PHONY : src/ControlServer.cpp.o
 
 src/ControlServer.i: src/ControlServer.cpp.i
@@ -235,6 +236,7 @@ src/ControlServer.i: src/ControlServer.cpp.i
 # target to preprocess a source file
 src/ControlServer.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/obs-cams.dir/build.make CMakeFiles/obs-cams.dir/src/ControlServer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cams_tests.dir/build.make CMakeFiles/cams_tests.dir/src/ControlServer.cpp.i
 .PHONY : src/ControlServer.cpp.i
 
 src/ControlServer.s: src/ControlServer.cpp.s
@@ -243,7 +245,35 @@ src/ControlServer.s: src/ControlServer.cpp.s
 # target to generate assembly for a file
 src/ControlServer.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/obs-cams.dir/build.make CMakeFiles/obs-cams.dir/src/ControlServer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cams_tests.dir/build.make CMakeFiles/cams_tests.dir/src/ControlServer.cpp.s
 .PHONY : src/ControlServer.cpp.s
+
+src/FrameReassembler.o: src/FrameReassembler.cpp.o
+.PHONY : src/FrameReassembler.o
+
+# target to build an object file
+src/FrameReassembler.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/obs-cams.dir/build.make CMakeFiles/obs-cams.dir/src/FrameReassembler.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cams_tests.dir/build.make CMakeFiles/cams_tests.dir/src/FrameReassembler.cpp.o
+.PHONY : src/FrameReassembler.cpp.o
+
+src/FrameReassembler.i: src/FrameReassembler.cpp.i
+.PHONY : src/FrameReassembler.i
+
+# target to preprocess a source file
+src/FrameReassembler.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/obs-cams.dir/build.make CMakeFiles/obs-cams.dir/src/FrameReassembler.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cams_tests.dir/build.make CMakeFiles/cams_tests.dir/src/FrameReassembler.cpp.i
+.PHONY : src/FrameReassembler.cpp.i
+
+src/FrameReassembler.s: src/FrameReassembler.cpp.s
+.PHONY : src/FrameReassembler.s
+
+# target to generate assembly for a file
+src/FrameReassembler.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/obs-cams.dir/build.make CMakeFiles/obs-cams.dir/src/FrameReassembler.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cams_tests.dir/build.make CMakeFiles/cams_tests.dir/src/FrameReassembler.cpp.s
+.PHONY : src/FrameReassembler.cpp.s
 
 src/JitterBuffer.o: src/JitterBuffer.cpp.o
 .PHONY : src/JitterBuffer.o
@@ -389,6 +419,9 @@ help:
 	@echo "... src/ControlServer.o"
 	@echo "... src/ControlServer.i"
 	@echo "... src/ControlServer.s"
+	@echo "... src/FrameReassembler.o"
+	@echo "... src/FrameReassembler.i"
+	@echo "... src/FrameReassembler.s"
 	@echo "... src/JitterBuffer.o"
 	@echo "... src/JitterBuffer.i"
 	@echo "... src/JitterBuffer.s"
