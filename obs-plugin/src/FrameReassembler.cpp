@@ -85,7 +85,8 @@ ReassemblyOutcome FrameReassembler::push(
 std::vector<const char *> FrameReassembler::expire(uint64_t nowMs) {
     std::vector<const char *> lossReasons;
     for (auto it = m_assemblyMap.begin(); it != m_assemblyMap.end(); ) {
-        if (nowMs - it->second.receiveTimeMs > kFragmentTimeoutMs) {
+        if (nowMs >= it->second.receiveTimeMs &&
+            nowMs - it->second.receiveTimeMs > kFragmentTimeoutMs) {
             lossReasons.push_back("fragment reassembly timeout");
             it = m_assemblyMap.erase(it);
         } else {
