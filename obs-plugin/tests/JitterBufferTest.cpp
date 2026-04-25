@@ -5,6 +5,7 @@
 #include "JitterBuffer.h"
 
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <thread>
@@ -40,7 +41,7 @@ static int  g_failed = 0;
 
 // Helper: builds a PacketHeader with the given sequence number.
 static cams::PacketHeader makeHeader(uint32_t seq) {
-    return {seq, static_cast<uint64_t>(seq) * 1000, cams::FrameType::H264, 4};
+    return {seq, static_cast<uint64_t>(seq) * 1000, cams::FrameType::H264, 0, 1, 4};
 }
 
 static std::vector<uint8_t> makePayload(uint32_t seq) {
@@ -160,6 +161,29 @@ TEST(test_set_capacity_flushes) {
     ASSERT_EQ(buf.capacity(), 0u);
 }
 
+TEST(test_sequence_wraparound_reordering) {
+    cams::JitterBuffer buf(3);
+
+    buf.push(makeHeader(UINT32_MAX), makePayload(UINT32_MAX));
+    buf.push(makeHeader(UINT32_MAX - 1), makePayload(UINT32_MAX - 1));
+    buf.push(makeHeader(0), makePayload(0));
+    buf.push(makeHeader(1), makePayload(1));
+
+    auto f0 = buf.tryPop();
+    auto f1 = buf.tryPop();
+    auto f2 = buf.tryPop();
+    auto f3 = buf.tryPop();
+
+    ASSERT_TRUE(f0.has_value());
+    ASSERT_TRUE(f1.has_value());
+    ASSERT_TRUE(f2.has_value());
+    ASSERT_TRUE(f3.has_value());
+    ASSERT_EQ(f0->sequenceNumber, UINT32_MAX - 1);
+    ASSERT_EQ(f1->sequenceNumber, UINT32_MAX);
+    ASSERT_EQ(f2->sequenceNumber, 0u);
+    ASSERT_EQ(f3->sequenceNumber, 1u);
+}
+
 TEST(test_produce_consume_threaded) {
     cams::JitterBuffer buf(3);
     static constexpr uint32_t kCount = 50;
@@ -202,6 +226,7 @@ int main() {
     RUN(test_overflow_evicts_oldest); prevFailed = g_failed;
     RUN(test_flush_wakes_blocked_pop); prevFailed = g_failed;
     RUN(test_set_capacity_flushes);   prevFailed = g_failed;
+    RUN(test_sequence_wraparound_reordering); prevFailed = g_failed;
     RUN(test_produce_consume_threaded); prevFailed = g_failed;
 
     fprintf(stdout, "\nResults: %d passed, %d failed\n", g_passed, g_failed);

@@ -18,6 +18,16 @@ import CoreMedia
 import CoreVideo
 import Foundation
 
+private final class EncodeBufferRef {
+    let pool: CircularBufferPool
+    let pixelBuffer: CVPixelBuffer
+
+    init(pool: CircularBufferPool, pixelBuffer: CVPixelBuffer) {
+        self.pool = pool
+        self.pixelBuffer = pixelBuffer
+    }
+}
+
 // MARK: - VideoEncoderDelegate
 
 /// Receives encoded sample buffers from the encoder.
@@ -55,10 +65,10 @@ public struct VideoEncoderConfiguration: Sendable {
     public let preferHEVC: Bool
 
     public init(
-        targetBitrate: Int = 50_000_000,
-        frameRate: Int = 60,
-        width: Int = 3840,
-        height: Int = 2160,
+        targetBitrate: Int = 8_000_000,
+        frameRate: Int = 30,
+        width: Int = 1920,
+        height: Int = 1080,
         preferHEVC: Bool = true
     ) {
         self.targetBitrate = targetBitrate
@@ -90,6 +100,7 @@ public final class VideoEncoder: @unchecked Sendable {
     private var isRunning = false
     private var frameCount: UInt32 = 0
     private var usingHEVC  = false
+    private var forceKeyframeOnNextFrame = true
 
     private let encoderQueue = DispatchQueue(
         label: "com.cams.videoEncoder",
@@ -121,6 +132,13 @@ public final class VideoEncoder: @unchecked Sendable {
         }
     }
 
+    /// Forces the next submitted frame to be encoded as an IDR/keyframe.
+    public func requestKeyframe() {
+        encoderQueue.async { [weak self] in
+            self?.forceKeyframeOnNextFrame = true
+        }
+    }
+
     /// Encodes `pixelBuffer`, returning the buffer to `pool` when done.
     ///
     /// If the underlying session is not ready the buffer is returned immediately
@@ -136,20 +154,36 @@ public final class VideoEncoder: @unchecked Sendable {
                 return
             }
 
+            let frameProperties: CFDictionary?
+            if self.forceKeyframeOnNextFrame {
+                self.forceKeyframeOnNextFrame = false
+                frameProperties = [
+                    kVTEncodeFrameOptionKey_ForceKeyFrame: true
+                ] as CFDictionary
+            } else {
+                frameProperties = nil
+            }
+
+            let sourceFrameRefcon = pool.map {
+                Unmanaged.passRetained(EncodeBufferRef(pool: $0, pixelBuffer: pixelBuffer)).toOpaque()
+            }
+
             var flags = VTEncodeInfoFlags()
             let status = VTCompressionSessionEncodeFrame(
                 session,
                 imageBuffer: pixelBuffer,
                 presentationTimeStamp: presentationTime,
                 duration: CMTime(value: 1, timescale: CMTimeScale(self.configuration.frameRate)),
-                frameProperties: nil,
+                frameProperties: frameProperties,
+                sourceFrameRefcon: sourceFrameRefcon,
                 infoFlagsOut: &flags
             )
 
-            // Return buffer to pool immediately after submitting to the encoder.
-            pool?.enqueue(pixelBuffer)
-
             if status != noErr {
+                if let sourceFrameRefcon {
+                    let ref = Unmanaged<EncodeBufferRef>.fromOpaque(sourceFrameRefcon).takeRetainedValue()
+                    ref.pool.enqueue(ref.pixelBuffer)
+                }
                 // Encoder session became invalid (e.g., thermal throttling).
                 // Recreate the session so encoding can resume with the next frame.
                 self.handleEncoderError(status: status)
@@ -180,6 +214,7 @@ public final class VideoEncoder: @unchecked Sendable {
                 session   = s
                 usingHEVC = (codec == kCMVideoCodecType_HEVC)
                 isRunning = true
+                forceKeyframeOnNextFrame = true
                 return
             }
         }
@@ -203,7 +238,11 @@ public final class VideoEncoder: @unchecked Sendable {
         // Unretained self pointer for C callback.
         let callbackRefcon = Unmanaged.passUnretained(self).toOpaque()
 
-        let outputCallback: VTCompressionOutputCallback = { refcon, _, status, flags, sampleBuffer in
+        let outputCallback: VTCompressionOutputCallback = { refcon, sourceFrameRefcon, status, flags, sampleBuffer in
+            if let sourceFrameRefcon {
+                let ref = Unmanaged<EncodeBufferRef>.fromOpaque(sourceFrameRefcon).takeRetainedValue()
+                ref.pool.enqueue(ref.pixelBuffer)
+            }
             guard let refcon, status == noErr, let sampleBuffer else { return }
             let encoder = Unmanaged<VideoEncoder>.fromOpaque(refcon).takeUnretainedValue()
             encoder.handleEncodedSample(sampleBuffer: sampleBuffer, flags: flags)
@@ -302,6 +341,7 @@ public final class VideoEncoder: @unchecked Sendable {
     /// encoding can resume automatically (e.g., after thermal throttling).
     private func handleEncoderError(status: OSStatus) {
         isRunning = false
+        forceKeyframeOnNextFrame = true
         session.map { VTCompressionSessionInvalidate($0) }
         session = nil
 
@@ -320,6 +360,7 @@ public final class VideoEncoder: @unchecked Sendable {
     private func stopSync() {
         isRunning = false
         frameCount = 0
+        forceKeyframeOnNextFrame = true
         guard let s = session else { return }
         VTCompressionSessionCompleteFrames(s, untilPresentationTimeStamp: .invalid)
         VTCompressionSessionInvalidate(s)

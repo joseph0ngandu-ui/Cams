@@ -71,16 +71,21 @@ private:
 
     std::thread       m_decoderThread;
     std::atomic<bool> m_running{false};
+    FrameType         m_decoderCodec = FrameType::H264; // Codec the decoder was opened with.
 
     // Selected device info (from the properties UI).
     std::string m_selectedDevice;
+    std::string m_manualHost;
     BufferMode  m_bufferMode = BufferMode::Stable;
+    int         m_qualityPreset = 2; // 0 low, 1 medium, 2 high
+    bool        m_audioEnabled = false;
 
     // ── OBS frame output ─────────────────────────────────────────────────
     obs_source_frame m_obsFrame{};
 
     // ── Internals ────────────────────────────────────────────────────────
     void applySettings(obs_data_t *settings);
+    void activateTarget();
     void startPipeline();
     void stopPipeline();
     void decoderLoop();
@@ -92,6 +97,8 @@ private:
     static bool onExposureLockClicked(
         obs_properties_t *props, obs_property_t *prop, void *data);
     static bool onRefreshDevicesClicked(
+        obs_properties_t *props, obs_property_t *prop, void *data);
+    static bool onActivateClicked(
         obs_properties_t *props, obs_property_t *prop, void *data);
 };
 

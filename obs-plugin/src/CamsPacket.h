@@ -2,8 +2,8 @@
 // Cams OBS Plugin — Shared packet definitions, mirroring CamsProtocol.swift.
 //
 // Wire format (big-endian):
-//  [Sequence Number (4)] [Timestamp (8)] [Frame Type (1)] [Payload Length (4)]
-//  [Payload (variable)]
+//  [Sequence Number (4)] [Timestamp (8)] [Frame Type (1)]
+//  [Fragment Index (2)] [Fragment Count (2)] [Payload Length (4)] [Payload]
 //
 // All multi-byte fields are transmitted in network (big-endian) byte order.
 
@@ -20,6 +20,8 @@ static inline uint64_t _cams_htobe64(uint64_t v) {
     return (static_cast<uint64_t>(htonl(static_cast<uint32_t>(v & 0xFFFFFFFFULL))) << 32)
          | htonl(static_cast<uint32_t>(v >> 32));
 }
+#define htobe16(x)  htons(x)
+#define be16toh(x)  ntohs(x)
 #define htobe32(x)  htonl(x)
 #define be32toh(x)  ntohl(x)
 #define htobe64(x)  _cams_htobe64(x)
@@ -33,6 +35,8 @@ static inline uint64_t _cams_htobe64(uint64_t v) {
 #include <machine/endian.h>
 #include <libkern/OSByteOrder.h>
 #ifndef htobe32
+#define htobe16(x)  OSSwapHostToBigInt16(x)
+#define be16toh(x)  OSSwapBigToHostInt16(x)
 #define htobe32(x)  OSSwapHostToBigInt32(x)
 #define be32toh(x)  OSSwapBigToHostInt32(x)
 #define htobe64(x)  OSSwapHostToBigInt64(x)
@@ -62,7 +66,11 @@ static constexpr uint16_t kVideoPort   = 8888;
 /// Control back-channel port.
 static constexpr uint16_t kControlPort = 8889;
 /// Fixed header size in bytes.
-static constexpr size_t   kHeaderSize  = 17;
+static constexpr size_t   kHeaderSize  = 21;
+/// Largest UDP payload accepted by the receiver after the Cams header.
+static constexpr size_t   kMaxDatagramPayloadSize = 65536 - kHeaderSize;
+/// Defensive cap on fragments per encoded frame.
+static constexpr uint16_t kMaxFragments = 256;
 
 // ---------------------------------------------------------------------------
 // Frame Types
@@ -73,6 +81,7 @@ enum class FrameType : uint8_t {
     HEVC          = 0x02,
     ParameterSets = 0x03,
     Keyframe      = 0x04,
+    AudioPCM      = 0x10,
     EndOfStream   = 0xFF,
 };
 
@@ -99,6 +108,10 @@ enum class ControlCommand : uint8_t {
     LockExposure     = 0x03,
     UnlockExposure   = 0x04,
     RequestKeyframe  = 0x05,
+    SetQualityLow    = 0x06,
+    SetQualityMedium = 0x07,
+    SetQualityHigh   = 0x08,
+    SetAudioEnabled  = 0x09,
     Ping             = 0xFE,
     Pong             = 0xFF,
 };
@@ -112,6 +125,8 @@ struct PacketHeader {
     uint32_t  sequenceNumber;  ///< Monotonically increasing frame counter.
     uint64_t  timestamp;       ///< Capture timestamp in nanoseconds.
     FrameType frameType;       ///< Content type of the enclosed payload.
+    uint16_t  fragmentIndex;   ///< Fragment index (0-based).
+    uint16_t  fragmentCount;   ///< Total number of fragments for this frame.
     uint32_t  payloadLength;   ///< Byte length of the payload that follows.
 
     // -----------------------------------------------------------------------
@@ -119,14 +134,18 @@ struct PacketHeader {
 
     /// Serialises the header into exactly kHeaderSize bytes (big-endian).
     void serialise(uint8_t out[kHeaderSize]) const {
-        uint32_t seqBE  = htobe32(sequenceNumber);
-        uint64_t tsBE   = htobe64(timestamp);
-        uint32_t lenBE  = htobe32(payloadLength);
+        uint32_t seqBE   = htobe32(sequenceNumber);
+        uint64_t tsBE    = htobe64(timestamp);
+        uint16_t fIdxBE  = htobe16(fragmentIndex);
+        uint16_t fCntBE  = htobe16(fragmentCount);
+        uint32_t lenBE   = htobe32(payloadLength);
 
         size_t offset = 0;
         std::memcpy(out + offset, &seqBE,  4);  offset += 4;
         std::memcpy(out + offset, &tsBE,   8);  offset += 8;
         out[offset] = static_cast<uint8_t>(frameType);  ++offset;
+        std::memcpy(out + offset, &fIdxBE, 2);  offset += 2;
+        std::memcpy(out + offset, &fCntBE, 2);  offset += 2;
         std::memcpy(out + offset, &lenBE,  4);
     }
 
@@ -141,12 +160,16 @@ struct PacketHeader {
         PacketHeader h;
         uint32_t seqBE;
         uint64_t tsBE;
+        uint16_t fIdxBE;
+        uint16_t fCntBE;
         uint32_t lenBE;
 
-        std::memcpy(&seqBE, data,      4);
-        std::memcpy(&tsBE,  data + 4,  8);
+        std::memcpy(&seqBE,  data,      4);
+        std::memcpy(&tsBE,   data + 4,  8);
         uint8_t ftByte = data[12];
-        std::memcpy(&lenBE, data + 13, 4);
+        std::memcpy(&fIdxBE, data + 13, 2);
+        std::memcpy(&fCntBE, data + 15, 2);
+        std::memcpy(&lenBE,  data + 17, 4);
 
         // Validate frame type.
         switch (static_cast<FrameType>(ftByte)) {
@@ -154,6 +177,7 @@ struct PacketHeader {
         case FrameType::HEVC:
         case FrameType::ParameterSets:
         case FrameType::Keyframe:
+        case FrameType::AudioPCM:
         case FrameType::EndOfStream:
             break;
         default:
@@ -163,7 +187,16 @@ struct PacketHeader {
         h.sequenceNumber = be32toh(seqBE);
         h.timestamp      = be64toh(tsBE);
         h.frameType      = static_cast<FrameType>(ftByte);
+        h.fragmentIndex  = be16toh(fIdxBE);
+        h.fragmentCount  = be16toh(fCntBE);
         h.payloadLength  = be32toh(lenBE);
+        if (h.fragmentCount == 0 ||
+            h.fragmentIndex >= h.fragmentCount ||
+            h.fragmentCount > kMaxFragments ||
+            h.payloadLength > kMaxDatagramPayloadSize)
+        {
+            return std::nullopt;
+        }
         return h;
     }
 };
@@ -196,6 +229,10 @@ struct ControlPacket {
         case ControlCommand::LockExposure:
         case ControlCommand::UnlockExposure:
         case ControlCommand::RequestKeyframe:
+        case ControlCommand::SetQualityLow:
+        case ControlCommand::SetQualityMedium:
+        case ControlCommand::SetQualityHigh:
+        case ControlCommand::SetAudioEnabled:
         case ControlCommand::Ping:
         case ControlCommand::Pong:
             pkt.command = static_cast<ControlCommand>(data[0]);
@@ -210,4 +247,3 @@ struct ControlPacket {
 };
 
 } // namespace cams
-

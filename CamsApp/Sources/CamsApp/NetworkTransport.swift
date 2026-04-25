@@ -33,7 +33,7 @@ public final class NetworkTransport: @unchecked Sendable {
     // MARK: Configuration
 
     /// Maximum number of packets queued for sending before backpressure fires.
-    public var maxQueueDepth: Int = 8
+    public var maxQueueDepth: Int = 800
 
     // MARK: Public state
 
@@ -67,10 +67,14 @@ public final class NetworkTransport: @unchecked Sendable {
     public func connect(host: String, port: UInt16 = kCamsVideoPort) {
         queue.async { [weak self] in
             guard let self else { return }
-            self.targetHost = host
+            let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedHost.isEmpty else { return }
+            self.targetHost = trimmedHost
             self.targetPort = port
             self.isStopped  = false
             self.reconnectDelay = 1.0
+            self.stopInternal()
+            self.isStopped = false
             self.openConnection()
         }
     }
@@ -101,44 +105,63 @@ public final class NetworkTransport: @unchecked Sendable {
                 return
             }
 
-            let seqNum = self.sequenceNumber
-            self.sequenceNumber &+= 1
+            let timestamp = camsCurrentTimestampNs()
+            let maxFragmentSize = 1200
+            let totalFragments = max(1, (data.count + maxFragmentSize - 1) / maxFragmentSize)
+            guard totalFragments <= Int(UInt16.max) else {
+                self.delegate?.transportNeedsBackpressure(self, queueDepth: self.pendingSendCount)
+                return
+            }
 
-            let header = CamsPacketHeader(
-                sequenceNumber: seqNum,
-                timestamp:      camsCurrentTimestampNs(),
-                frameType:      frameType,
-                payloadLength:  UInt32(data.count)
-            )
+            for i in 0..<totalFragments {
+                let offset = i * maxFragmentSize
+                let length = min(maxFragmentSize, data.count - offset)
+                let chunk = data.subdata(in: offset..<(offset + length))
 
-            var packet = header.serialise()
-            packet.append(data)
+                let seqNum = self.sequenceNumber
+                self.sequenceNumber &+= 1
 
-            self.pendingSendCount += 1
-            self.connection?.send(
-                content: packet,
-                completion: .contentProcessed { [weak self] error in
-                    guard let self else { return }
-                    self.queue.async {
-                        self.pendingSendCount = max(0, self.pendingSendCount - 1)
-                        if let nwError = error as? NWError,
-                           case .posix(let posixCode) = nwError,
-                           posixCode == POSIXErrorCode.ECANCELED {
-                            // Socket was cancelled deliberately — not an error condition.
-                            return
+                let header = CamsPacketHeader(
+                    sequenceNumber: seqNum,
+                    timestamp:      timestamp,
+                    frameType:      frameType,
+                    fragmentIndex:  UInt16(i),
+                    fragmentCount:  UInt16(totalFragments),
+                    payloadLength:  UInt32(chunk.count)
+                )
+
+                var packet = header.serialise()
+                packet.append(chunk)
+
+                self.pendingSendCount += 1
+                self.connection?.send(
+                    content: packet,
+                    completion: .contentProcessed { [weak self] error in
+                        guard let self else { return }
+                        self.queue.async {
+                            self.pendingSendCount = max(0, self.pendingSendCount - 1)
+                            if let error,
+                               case .posix(let posixCode) = error,
+                               posixCode == POSIXErrorCode.ECANCELED {
+                                // Socket was cancelled deliberately — not an error condition.
+                                return
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     }
 
     // MARK: - Private helpers
 
     private func openConnection() {
+        guard !targetHost.isEmpty, let port = NWEndpoint.Port(rawValue: targetPort) else {
+            return
+        }
         let endpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host(targetHost),
-            port: NWEndpoint.Port(rawValue: targetPort)!
+            port: port
         )
         let params = NWParameters.udp
         params.allowLocalEndpointReuse = true

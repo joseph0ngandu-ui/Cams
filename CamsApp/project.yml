@@ -1,0 +1,23 @@
+name: Cams
+options:
+  deploymentTarget:
+    iOS: "16.0"
+configs:
+  Debug: debug
+  Release: release
+targets:
+  Cams:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources/CamsApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.josephngandu.cams
+        PRODUCT_NAME: Cams
+        SWIFT_VERSION: "5.9"
+        INFOPLIST_FILE: CamsApp-Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+    scheme:
+      testTargets: []

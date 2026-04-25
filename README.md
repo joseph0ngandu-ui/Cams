@@ -299,6 +299,13 @@ Ensure your firewall and Wi-Fi router allow UDP traffic on both ports within you
 
 ---
 
+## Release Process
+
+Use `docs/RELEASE_CHECKLIST.md` before cutting a release tag. It includes CI gates,
+plugin load checks in OBS, and runtime validation requirements.
+
+---
+
 ## License
 
 This project is released under the [MIT License](LICENSE).

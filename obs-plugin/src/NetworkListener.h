@@ -20,6 +20,9 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <unordered_map>
+#include <chrono>
+#include <optional>
 
 // POSIX sockets
 #ifdef _WIN32
@@ -72,6 +75,8 @@ class NetworkListener {
 public:
     /// Called when a complete packet arrives.
     using PacketCallback = std::function<void(PacketHeader, std::vector<uint8_t>)>;
+    /// Called when loss or malformed input requires decoder recovery.
+    using LossCallback = std::function<void(const char *reason)>;
 
     NetworkListener();
     ~NetworkListener();
@@ -96,6 +101,8 @@ public:
 
     /// Register the callback invoked for each valid incoming packet.
     void setPacketCallback(PacketCallback cb);
+    /// Register the callback invoked when packet loss is detected.
+    void setLossCallback(LossCallback cb);
 
     // -----------------------------------------------------------------------
     // Bonjour discovery
@@ -113,11 +120,29 @@ private:
     std::atomic<bool>  m_running{false};
     std::thread        m_receiveThread;
     PacketCallback     m_packetCallback;
+    LossCallback       m_lossCallback;
     mutable std::mutex m_callbackMutex;
+    std::atomic<uint64_t> m_invalidPacketCount{0};
+
+    // ── Frame Reassembly ──────────────────────────────────────────────────
+    struct FrameAssembly {
+        uint64_t timestamp = 0;
+        uint64_t receiveTimeMs = 0;
+        uint16_t fragmentCount = 0;
+        uint16_t fragmentsReceived = 0;
+        size_t totalExpectedLength = 0;
+        std::vector<std::optional<std::vector<uint8_t>>> fragments;
+        PacketHeader header{};
+    };
+
+    mutable std::mutex m_assemblyMutex;
+    std::unordered_map<uint64_t, FrameAssembly> m_assemblyMap;
 
     void receiveLoop();
     bool createSocket(uint16_t port);
     void destroySocket();
+    void notifyLoss(const char *reason);
+    void recordInvalidPacket(const char *reason);
 
     // ── Bonjour ──────────────────────────────────────────────────────────
 #if CAMS_HAS_DNSSD

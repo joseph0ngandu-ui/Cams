@@ -24,6 +24,12 @@ public protocol CaptureSessionDelegate: AnyObject, Sendable {
     func captureSession(_ session: CaptureSession, isRunning: Bool)
     /// Called when an unrecoverable setup error occurs.
     func captureSession(_ session: CaptureSession, didFailWithError error: Error)
+    /// Called when the UDP transport becomes ready.
+    func captureSessionDidConnectTransport(_ session: CaptureSession)
+    /// Called when the UDP transport disconnects or waits.
+    func captureSession(_ session: CaptureSession, didDisconnectTransport error: Error?)
+    /// Called when network congestion forces the encoder to reduce bitrate.
+    func captureSession(_ session: CaptureSession, didApplyBackpressureBitrate bitrate: Int)
 }
 
 // MARK: - CaptureSession
@@ -36,6 +42,8 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
     public weak var delegate: (any CaptureSessionDelegate)?
     public let encoder: VideoEncoder
     public let transport: NetworkTransport
+    public var previewSession: AVCaptureSession { avSession }
+    public private(set) weak var captureDevice: AVCaptureDevice?
 
     // MARK: Private state
 
@@ -50,6 +58,7 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
 
     private var thermalObserver: Any?
     private var currentConfig: VideoEncoderConfiguration
+    private var currentThermalBitrate: Int
 
     // MARK: - Lifecycle
 
@@ -61,6 +70,7 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
         transport: NetworkTransport
     ) {
         self.currentConfig = encoderConfig
+        self.currentThermalBitrate = encoderConfig.targetBitrate
         self.encoder       = VideoEncoder(configuration: encoderConfig)
         self.transport     = transport
 
@@ -77,9 +87,6 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
 
     deinit {
         stopCapture()
-        if let obs = thermalObserver {
-            NotificationCenter.default.removeObserver(obs)
-        }
     }
 
     // MARK: - Public API
@@ -92,6 +99,22 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
     /// - Parameter device: The `AVCaptureDevice` to use.  Defaults to the
     ///   built-in wide-angle camera.
     public func startCapture(device: AVCaptureDevice? = nil) throws {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            break
+        case .notDetermined:
+            let semaphore = DispatchSemaphore(value: 0)
+            var granted = false
+            AVCaptureDevice.requestAccess(for: .video) { ok in
+                granted = ok
+                semaphore.signal()
+            }
+            semaphore.wait()
+            guard granted else { throw CaptureSessionError.cameraPermissionDenied }
+        default:
+            throw CaptureSessionError.cameraPermissionDenied
+        }
+
         let captureDevice: AVCaptureDevice
         if let d = device {
             captureDevice = d
@@ -104,16 +127,21 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
         } else {
             throw CaptureSessionError.noCameraAvailable
         }
+        self.captureDevice = captureDevice
+        try? configureFrameRate(for: captureDevice)
 
         let input = try AVCaptureDeviceInput(device: captureDevice)
 
         avSession.beginConfiguration()
 
-        if avSession.canSetSessionPreset(.hd4K3840x2160) {
-            avSession.sessionPreset = .hd4K3840x2160
-        } else if avSession.canSetSessionPreset(.hd1920x1080) {
-            avSession.sessionPreset = .hd1920x1080
+        for oldInput in avSession.inputs {
+            avSession.removeInput(oldInput)
         }
+        for oldOutput in avSession.outputs {
+            avSession.removeOutput(oldOutput)
+        }
+
+        applySessionPreset(for: currentConfig)
 
         guard avSession.canAddInput(input) else {
             avSession.commitConfiguration()
@@ -135,9 +163,23 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
         }
         avSession.addOutput(output)
 
+        // Lock the video orientation to portrait so the feed doesn't rotate
+        // when the user tilts the device.  Without this, the stream dimensions
+        // change mid-stream and the OBS decoder has to constantly reconfigure.
+        if let videoConnection = output.connection(with: .video) {
+            if videoConnection.isVideoOrientationSupported {
+                videoConnection.videoOrientation = .landscapeRight
+            }
+            // Front camera is mirrored by default; undo that for streaming.
+            if videoConnection.isVideoMirroringSupported {
+                videoConnection.isVideoMirrored = false
+            }
+        }
+
         avSession.commitConfiguration()
 
-        encoder.start()
+        encoder.start(configuration: currentConfig)
+        encoder.requestKeyframe()
         avSession.startRunning()
 
         observeThermalState()
@@ -152,15 +194,37 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
     public func stopCapture() {
         avSession.stopRunning()
         encoder.stop()
+        removeThermalObserver()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.delegate?.captureSession(self, isRunning: false)
         }
     }
 
+    public func updateEncoderConfiguration(_ config: VideoEncoderConfiguration) {
+        currentConfig = config
+        currentThermalBitrate = config.targetBitrate
+        captureQueue.async { [weak self] in
+            guard let self else { return }
+            self.avSession.beginConfiguration()
+            self.applySessionPreset(for: config)
+            self.avSession.commitConfiguration()
+            if let device = self.captureDevice {
+                try? self.configureFrameRate(for: device)
+            }
+            self.encoder.start(configuration: config)
+            self.encoder.requestKeyframe()
+        }
+    }
+
+    public func requestKeyframe() {
+        encoder.requestKeyframe()
+    }
+
     // MARK: - Thermal state management
 
     private func observeThermalState() {
+        removeThermalObserver()
         thermalObserver = NotificationCenter.default.addObserver(
             forName: ProcessInfo.thermalStateDidChangeNotification,
             object: nil,
@@ -188,6 +252,9 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
             break
         }
 
+        guard newBitrate != currentThermalBitrate else { return }
+        currentThermalBitrate = newBitrate
+
         let reducedConfig = VideoEncoderConfiguration(
             targetBitrate: newBitrate,
             frameRate:     currentConfig.frameRate,
@@ -196,6 +263,37 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
             preferHEVC:    currentConfig.preferHEVC
         )
         encoder.start(configuration: reducedConfig)
+        encoder.requestKeyframe()
+    }
+
+    private func removeThermalObserver() {
+        if let obs = thermalObserver {
+            NotificationCenter.default.removeObserver(obs)
+            thermalObserver = nil
+        }
+    }
+
+    private func applySessionPreset(for config: VideoEncoderConfiguration) {
+        if config.width >= 3840 && avSession.canSetSessionPreset(.hd4K3840x2160) {
+            avSession.sessionPreset = .hd4K3840x2160
+        } else if config.width >= 1920 && avSession.canSetSessionPreset(.hd1920x1080) {
+            avSession.sessionPreset = .hd1920x1080
+        } else if avSession.canSetSessionPreset(.hd1280x720) {
+            avSession.sessionPreset = .hd1280x720
+        }
+    }
+
+    private func configureFrameRate(for device: AVCaptureDevice) throws {
+        let fps = Double(currentConfig.frameRate)
+        guard device.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= fps && fps <= $0.maxFrameRate }) else {
+            return
+        }
+
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        let duration = CMTime(value: 1, timescale: CMTimeScale(currentConfig.frameRate))
+        device.activeVideoMinFrameDuration = duration
+        device.activeVideoMaxFrameDuration = duration
     }
 }
 
@@ -233,6 +331,23 @@ extension CaptureSession: VideoEncoderDelegate {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         isKeyframe: Bool
     ) {
+        if isKeyframe,
+           let format = CMSampleBufferGetFormatDescription(sampleBuffer)
+        {
+            let subType = CMFormatDescriptionGetMediaSubType(format)
+            var parameterSets: Data?
+
+            if subType == kCMVideoCodecType_H264 {
+                parameterSets = h264ParameterSets(from: format)
+            } else if subType == kCMVideoCodecType_HEVC {
+                parameterSets = hevcParameterSets(from: format)
+            }
+
+            if let parameterSets {
+                transport.send(data: parameterSets, frameType: .parameterSets)
+            }
+        }
+
         guard let dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
 
         var totalLength = 0
@@ -246,24 +361,153 @@ extension CaptureSession: VideoEncoderDelegate {
         )
         guard status == kCMBlockBufferNoErr, let ptr = dataPointer, totalLength > 0 else { return }
 
-        let data = Data(bytes: ptr, count: totalLength)
-        let frameType: FrameType = isKeyframe ? .keyframe : .h264
+        let avccData = Data(bytes: ptr, count: totalLength)
+        let data = avccToAnnexB(avccData)
+        guard !data.isEmpty else { return }
+
+        let format = CMSampleBufferGetFormatDescription(sampleBuffer)
+        let subType = format.map { CMFormatDescriptionGetMediaSubType($0) }
+        let isHEVC = (subType == kCMVideoCodecType_HEVC)
+
+        let frameType: FrameType
+        if isKeyframe {
+            frameType = .keyframe
+        } else {
+            frameType = isHEVC ? .hevc : .h264
+        }
+
         transport.send(data: data, frameType: frameType)
     }
 
     public func encoderDidReset(_ encoder: VideoEncoder) {
-        // Encoder was reset (e.g., thermal throttling) — restart it.
-        encoder.start(configuration: currentConfig)
+        encoder.requestKeyframe()
     }
+}
+
+// MARK: - H.264 helpers
+
+private func avccToAnnexB(_ avcc: Data) -> Data {
+    var out = Data()
+    var offset = 0
+    let lengthFieldSize = 4
+
+    while offset + lengthFieldSize <= avcc.count {
+        let naluLength = avcc[offset..<offset + lengthFieldSize].reduce(0) { ($0 << 8) | UInt32($1) }
+        offset += lengthFieldSize
+        guard naluLength > 0, offset + Int(naluLength) <= avcc.count else {
+            return Data()
+        }
+        out.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+        out.append(avcc[offset..<offset + Int(naluLength)])
+        offset += Int(naluLength)
+    }
+
+    return out
+}
+
+private func h264ParameterSets(from format: CMFormatDescription) -> Data? {
+    guard CMFormatDescriptionGetMediaSubType(format) == kCMVideoCodecType_H264 else {
+        return nil
+    }
+
+    var spsPointer: UnsafePointer<UInt8>?
+    var spsSize = 0
+    var spsCount = 0
+    var naluHeaderLength: Int32 = 0
+    var ppsPointer: UnsafePointer<UInt8>?
+    var ppsSize = 0
+    var ppsCount = 0
+
+    let spsStatus = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
+        format,
+        parameterSetIndex: 0,
+        parameterSetPointerOut: &spsPointer,
+        parameterSetSizeOut: &spsSize,
+        parameterSetCountOut: &spsCount,
+        nalUnitHeaderLengthOut: &naluHeaderLength
+    )
+    guard spsStatus == noErr, let spsPointer, spsSize > 0 else { return nil }
+
+    let ppsStatus = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
+        format,
+        parameterSetIndex: 1,
+        parameterSetPointerOut: &ppsPointer,
+        parameterSetSizeOut: &ppsSize,
+        parameterSetCountOut: &ppsCount,
+        nalUnitHeaderLengthOut: &naluHeaderLength
+    )
+    guard ppsStatus == noErr, let ppsPointer, ppsSize > 0 else { return nil }
+
+    var out = Data()
+    out.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+    out.append(spsPointer, count: spsSize)
+    out.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+    out.append(ppsPointer, count: ppsSize)
+    return out
+}
+
+private func hevcParameterSets(from format: CMFormatDescription) -> Data? {
+    guard CMFormatDescriptionGetMediaSubType(format) == kCMVideoCodecType_HEVC else {
+        return nil
+    }
+
+    var vpsPointer: UnsafePointer<UInt8>?
+    var vpsSize = 0
+    var vpsCount = 0
+    var naluHeaderLength: Int32 = 0
+    var spsPointer: UnsafePointer<UInt8>?
+    var spsSize = 0
+    var spsCount = 0
+    var ppsPointer: UnsafePointer<UInt8>?
+    var ppsSize = 0
+    var ppsCount = 0
+
+    // HEVC has 3 sets: VPS (0), SPS (1), PPS (2)
+    let vpsStatus = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+        format, parameterSetIndex: 0, parameterSetPointerOut: &vpsPointer,
+        parameterSetSizeOut: &vpsSize, parameterSetCountOut: &vpsCount, nalUnitHeaderLengthOut: &naluHeaderLength
+    )
+    guard vpsStatus == noErr, let vpsPointer, vpsSize > 0 else { return nil }
+
+    let spsStatus = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+        format, parameterSetIndex: 1, parameterSetPointerOut: &spsPointer,
+        parameterSetSizeOut: &spsSize, parameterSetCountOut: &spsCount, nalUnitHeaderLengthOut: &naluHeaderLength
+    )
+    guard spsStatus == noErr, let spsPointer, spsSize > 0 else { return nil }
+
+    let ppsStatus = CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+        format, parameterSetIndex: 2, parameterSetPointerOut: &ppsPointer,
+        parameterSetSizeOut: &ppsSize, parameterSetCountOut: &ppsCount, nalUnitHeaderLengthOut: &naluHeaderLength
+    )
+    guard ppsStatus == noErr, let ppsPointer, ppsSize > 0 else { return nil }
+
+    var out = Data()
+    out.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+    out.append(vpsPointer, count: vpsSize)
+    out.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+    out.append(spsPointer, count: spsSize)
+    out.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+    out.append(ppsPointer, count: ppsSize)
+    return out
 }
 
 // MARK: - NetworkTransportDelegate
 
 extension CaptureSession: NetworkTransportDelegate {
 
-    public func transportDidConnect(_ transport: NetworkTransport) {}
+    public func transportDidConnect(_ transport: NetworkTransport) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.captureSessionDidConnectTransport(self)
+        }
+    }
 
-    public func transportDidDisconnect(_ transport: NetworkTransport, error: Error?) {}
+    public func transportDidDisconnect(_ transport: NetworkTransport, error: Error?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.captureSession(self, didDisconnectTransport: error)
+        }
+    }
 
     public func transportNeedsBackpressure(
         _ transport: NetworkTransport,
@@ -282,6 +526,11 @@ extension CaptureSession: NetworkTransportDelegate {
             preferHEVC:    currentConfig.preferHEVC
         )
         encoder.start(configuration: reducedConfig)
+        encoder.requestKeyframe()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.captureSession(self, didApplyBackpressureBitrate: reducedBitrate)
+        }
     }
 }
 
@@ -289,12 +538,14 @@ extension CaptureSession: NetworkTransportDelegate {
 
 public enum CaptureSessionError: Error, LocalizedError {
     case noCameraAvailable
+    case cameraPermissionDenied
     case cannotAddInput
     case cannotAddOutput
 
     public var errorDescription: String? {
         switch self {
         case .noCameraAvailable: return "No camera device available on this hardware."
+        case .cameraPermissionDenied: return "Camera permission is denied. Enable it in Settings > Privacy > Camera."
         case .cannotAddInput:    return "Cannot add camera input to capture session."
         case .cannotAddOutput:   return "Cannot add video output to capture session."
         }

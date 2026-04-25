@@ -1,0 +1,25 @@
+name: iOS Swift Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  swift-tests:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: CamsApp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Test
+        run: swift test

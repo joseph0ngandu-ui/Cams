@@ -79,7 +79,7 @@ public:
     /// Change the jitter-buffer capacity at runtime (flushes current content).
     void setCapacity(size_t newCapacity);
 
-    size_t capacity() const { return m_capacity; }
+    size_t capacity() const;
     size_t size() const;
 
 private:
@@ -107,6 +107,8 @@ private:
     // Removes and returns the front of m_ready.
     // Caller must hold m_mutex and m_ready must be non-empty.
     DecodedFrame dequeueReady();
+
+    static bool sequenceBefore(uint32_t a, uint32_t b);
 };
 
 } // namespace cams

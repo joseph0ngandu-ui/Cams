@@ -1,0 +1,25 @@
+name: OBS Plugin Standalone Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  jitter-buffer-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: obs-plugin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (tests only)
+        run: cmake -B build -DBUILD_PLUGIN=OFF -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build tests
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure

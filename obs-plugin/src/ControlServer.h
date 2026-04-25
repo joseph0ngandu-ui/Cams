@@ -67,6 +67,10 @@ public:
 
     /// Requests an immediate IDR keyframe from the encoder.
     void sendKeyframeRequest();
+    /// Requests a quality preset change on the iOS app.
+    void sendQuality(int qualityPreset);
+    /// Enables/disables audio transport from iOS.
+    void sendAudioEnabled(bool enabled);
 
     /// Sends a ping and returns the round-trip latency in milliseconds.
     /// Blocks for up to `timeoutMs` milliseconds.
@@ -79,12 +83,15 @@ private:
 
     std::string       m_targetHost;
     uint16_t          m_targetPort  = kControlPort;
+    sockaddr_in       m_targetAddr{};
+    bool              m_targetResolved = false;
     mutable std::mutex m_targetMutex;
 
     bool createSocket(uint16_t port);
     void destroySocket();
     void receiveLoop();
     void sendCommand(ControlCommand cmd, const std::vector<uint8_t> &payload = {});
+    static bool resolveIPv4Target(const std::string &host, uint16_t port, sockaddr_in &out);
 };
 
 } // namespace cams

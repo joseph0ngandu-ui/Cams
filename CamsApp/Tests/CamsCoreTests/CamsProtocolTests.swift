@@ -44,6 +44,34 @@ final class CamsProtocolTests: XCTestCase {
         XCTAssertNil(CamsPacketHeader.deserialise(from: data))
     }
 
+    func testHeaderFragmentFieldsRoundTrip() {
+        let original = CamsPacketHeader(
+            sequenceNumber: 7,
+            timestamp: 99,
+            frameType: .keyframe,
+            fragmentIndex: 2,
+            fragmentCount: 4,
+            payloadLength: 1200
+        )
+
+        let parsed = CamsPacketHeader.deserialise(from: original.serialise())
+        XCTAssertEqual(parsed?.fragmentIndex, 2)
+        XCTAssertEqual(parsed?.fragmentCount, 4)
+    }
+
+    func testHeaderRejectsInvalidFragmentIndex() {
+        let header = CamsPacketHeader(
+            sequenceNumber: 7,
+            timestamp: 99,
+            frameType: .keyframe,
+            fragmentIndex: 4,
+            fragmentCount: 4,
+            payloadLength: 1200
+        )
+
+        XCTAssertNil(CamsPacketHeader.deserialise(from: header.serialise()))
+    }
+
     func testAllFrameTypesRoundTrip() {
         let types: [FrameType] = [.h264, .hevc, .parameterSets, .keyframe, .eos]
         for ft in types {
@@ -76,9 +104,17 @@ final class CamsProtocolTests: XCTestCase {
         // Timestamp bytes 4–11
         XCTAssertEqual(data[4], 0x01)
         XCTAssertEqual(data[11], 0x08)
-        // Payload length bytes 13–16
-        XCTAssertEqual(data[13], 0x0A)
-        XCTAssertEqual(data[16], 0x0D)
+        // Fragment index (bytes 13–14) — should stay zero.
+        XCTAssertEqual(data[13], 0x00)
+        XCTAssertEqual(data[14], 0x00)
+        // Fragment count (bytes 15–16) — default is 1.
+        XCTAssertEqual(data[15], 0x00)
+        XCTAssertEqual(data[16], 0x01)
+        // Payload length bytes 17–20
+        XCTAssertEqual(data[17], 0x0A)
+        XCTAssertEqual(data[20], 0x0D)
+        XCTAssertEqual(data[18], 0x0B)
+        XCTAssertEqual(data[19], 0x0C)
     }
 
     // MARK: - CamsControlPacket

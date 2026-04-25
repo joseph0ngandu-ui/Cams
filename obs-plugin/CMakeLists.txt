@@ -55,13 +55,14 @@ if(BUILD_PLUGIN)
 
     if(NOT libobs_FOUND)
         # Fallback: manual search.
-        find_path(OBS_INCLUDE_DIR obs-module.h
+        find_path(OBS_INCLUDE_DIR obs.h
             HINTS
                 "${OBS_SDK_ROOT}/include"
                 "${OBS_SDK_ROOT}/include/obs"
                 /usr/include/obs
                 /usr/local/include/obs
                 "C:/Program Files/obs-studio/include"
+            PATH_SUFFIXES obs
         )
         find_library(OBS_LIBRARY
             NAMES obs libobs

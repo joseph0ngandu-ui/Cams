@@ -37,6 +37,8 @@ public final class CircularBufferPool: @unchecked Sendable {
     private let lock = NSLock()
     private let semaphore: DispatchSemaphore
     private var available: [CVPixelBuffer]
+    private var availableIDs: Set<UnsafeMutableRawPointer>
+    private var checkedOutIDs: Set<UnsafeMutableRawPointer>
 
     // MARK: - Lifecycle
 
@@ -59,7 +61,11 @@ public final class CircularBufferPool: @unchecked Sendable {
         self.pixelFormat = pixelFormat
         self.semaphore   = DispatchSemaphore(value: 0)
         self.available   = []
+        self.availableIDs = []
+        self.checkedOutIDs = []
         self.available.reserveCapacity(capacity)
+        self.availableIDs.reserveCapacity(capacity)
+        self.checkedOutIDs.reserveCapacity(capacity)
 
         let attrs: [String: Any] = [
             kCVPixelBufferIOSurfacePropertiesKey as String: [:],
@@ -82,6 +88,7 @@ public final class CircularBufferPool: @unchecked Sendable {
                 throw CircularBufferPoolError.allocationFailed(status: status)
             }
             available.append(buffer)
+            availableIDs.insert(Self.identity(of: buffer))
             semaphore.signal()
         }
     }
@@ -101,7 +108,14 @@ public final class CircularBufferPool: @unchecked Sendable {
         guard semaphore.wait(timeout: timeout) == .success else { return nil }
         lock.lock()
         defer { lock.unlock() }
-        return available.popLast()
+        guard let buffer = available.popLast() else {
+            semaphore.signal()
+            return nil
+        }
+        let id = Self.identity(of: buffer)
+        availableIDs.remove(id)
+        checkedOutIDs.insert(id)
+        return buffer
     }
 
     /// Returns a buffer to the pool so it can be reused.
@@ -109,7 +123,13 @@ public final class CircularBufferPool: @unchecked Sendable {
     /// The caller **must not** retain or use the buffer after calling this method.
     public func enqueue(_ buffer: CVPixelBuffer) {
         lock.lock()
+        let id = Self.identity(of: buffer)
+        guard checkedOutIDs.remove(id) != nil, !availableIDs.contains(id) else {
+            lock.unlock()
+            return
+        }
         available.append(buffer)
+        availableIDs.insert(id)
         lock.unlock()
         semaphore.signal()
     }
@@ -119,6 +139,10 @@ public final class CircularBufferPool: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return available.count
+    }
+
+    private static func identity(of buffer: CVPixelBuffer) -> UnsafeMutableRawPointer {
+        Unmanaged<CVPixelBuffer>.passUnretained(buffer).toOpaque()
     }
 }
 

@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdio>
+#include <cstring>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -101,7 +102,7 @@ bool VideoDecoder::open(FrameType codec) {
         return false;
     }
 
-    m_needsKeyframe = true;
+    m_needsKeyframe.store(true);
     return true;
 }
 
@@ -118,32 +119,40 @@ void VideoDecoder::close() {
         m_hwDeviceCtx  = nullptr;
         m_hwDeviceType = AV_HWDEVICE_TYPE_NONE;
     }
-    m_needsKeyframe = true;
+    m_needsKeyframe.store(true);
 }
 
 // ---------------------------------------------------------------------------
 // Decoding
 // ---------------------------------------------------------------------------
 
-bool VideoDecoder::decode(const std::vector<uint8_t> &data, FrameCallback onFrame) {
+bool VideoDecoder::decode(const std::vector<uint8_t> &data, FrameType frameType, FrameCallback onFrame) {
     if (!m_codecCtx) return false;
+    if (!m_packet || data.empty()) return true;
 
     // If we haven't received a keyframe yet, discard until we do.
-    if (m_needsKeyframe) {
-        // A basic check: HEVC/H264 IDR NAL starts with specific byte patterns.
-        // We rely on the sender marking keyframes with FrameType::Keyframe.
-        // The actual IDR detection is handled server-side by the iOS app.
-        // Here we simply pass through and wait for the decoder to sync.
+    if (m_needsKeyframe.load() &&
+        frameType != FrameType::Keyframe &&
+        frameType != FrameType::ParameterSets)
+    {
+        return true;
     }
 
-    m_packet->data = const_cast<uint8_t *>(data.data());
-    m_packet->size = static_cast<int>(data.size());
+    av_packet_unref(m_packet);
+    int ret = av_new_packet(m_packet, static_cast<int>(data.size()));
+    if (ret < 0) {
+        fprintf(stderr, "[Cams] av_new_packet failed: %s\n", avError(ret).c_str());
+        reset();
+        return false;
+    }
+    std::memcpy(m_packet->data, data.data(), data.size());
 
-    int ret = avcodec_send_packet(m_codecCtx, m_packet);
+    ret = avcodec_send_packet(m_codecCtx, m_packet);
+    av_packet_unref(m_packet);
     if (ret < 0) {
         if (ret == AVERROR_INVALIDDATA) {
             // Corrupted or incomplete packet — request a keyframe and continue.
-            m_needsKeyframe = true;
+            m_needsKeyframe.store(true);
             return true;  // Non-fatal; allow recovery on next keyframe.
         }
         fprintf(stderr, "[Cams] avcodec_send_packet error: %s\n", avError(ret).c_str());
@@ -177,7 +186,7 @@ bool VideoDecoder::decode(const std::vector<uint8_t> &data, FrameCallback onFram
             outFrame = m_swFrame;
         }
 
-        m_needsKeyframe = false;
+        m_needsKeyframe.store(false);
         if (onFrame) onFrame(outFrame);
         av_frame_unref(m_frame);
         av_frame_unref(m_swFrame);
@@ -209,7 +218,7 @@ void VideoDecoder::initHardware(AVCodecContext *ctx) {
 
         ctx->hw_device_ctx = av_buffer_ref(deviceCtx);
         av_buffer_unref(&deviceCtx);
-        m_hwDeviceCtx  = ctx->hw_device_ctx;
+        m_hwDeviceCtx  = av_buffer_ref(ctx->hw_device_ctx);
         m_hwDeviceType = type;
         return;
     }

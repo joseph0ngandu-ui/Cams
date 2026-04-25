@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <atomic>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -72,7 +73,7 @@ public:
     /// On success the `onFrame` callback is invoked for each decoded picture.
     /// Returns false if a fatal error occurs; the decoder is automatically
     /// reset and `open()` must be called again.
-    bool decode(const std::vector<uint8_t> &data, FrameCallback onFrame);
+    bool decode(const std::vector<uint8_t> &data, FrameType frameType, FrameCallback onFrame);
 
     // -----------------------------------------------------------------------
     // Info
@@ -87,7 +88,7 @@ private:
     AVFrame              *m_frame         = nullptr;
     AVFrame              *m_swFrame       = nullptr;   ///< Software fallback frame.
     enum AVHWDeviceType   m_hwDeviceType  = AV_HWDEVICE_TYPE_NONE;
-    bool                  m_needsKeyframe = true;
+    std::atomic<bool>     m_needsKeyframe{true};
 
     // Attempts to initialise the best available hardware device context.
     void initHardware(AVCodecContext *ctx);

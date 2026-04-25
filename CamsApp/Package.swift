@@ -24,16 +24,12 @@ let package = Package(
             name: "CamsCore",
             dependencies: [],
             path: "Sources/CamsApp",
+            sources: [
+                "CamsProtocol.swift"
+            ],
             swiftSettings: [
                 // Enable strict concurrency checking to catch data-race issues at compile time.
                 .enableExperimentalFeature("StrictConcurrency")
-            ],
-            linkerSettings: [
-                .linkedFramework("AVFoundation"),
-                .linkedFramework("VideoToolbox"),
-                .linkedFramework("Network"),
-                .linkedFramework("CoreMedia"),
-                .linkedFramework("CoreVideo")
             ]
         ),
         .testTarget(

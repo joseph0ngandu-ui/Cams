@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#ifndef _WIN32
+#include <netdb.h>
+#endif
 
 namespace cams {
 
@@ -35,9 +38,19 @@ void ControlServer::stop() {
 }
 
 void ControlServer::setTarget(const std::string &host, uint16_t port) {
+    sockaddr_in resolved{};
+    bool ok = resolveIPv4Target(host, port, resolved);
+
     std::lock_guard<std::mutex> lk(m_targetMutex);
     m_targetHost = host;
     m_targetPort = port;
+    m_targetAddr = resolved;
+    m_targetResolved = ok;
+
+    if (!ok && !host.empty()) {
+        fprintf(stderr, "[Cams] Control target could not be resolved: %s:%u\n",
+                host.c_str(), port);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +67,24 @@ void ControlServer::sendExposureLock(bool locked) {
 
 void ControlServer::sendKeyframeRequest() {
     sendCommand(ControlCommand::RequestKeyframe);
+}
+
+void ControlServer::sendQuality(int qualityPreset) {
+    switch (qualityPreset) {
+    case 0:
+        sendCommand(ControlCommand::SetQualityLow);
+        break;
+    case 1:
+        sendCommand(ControlCommand::SetQualityMedium);
+        break;
+    default:
+        sendCommand(ControlCommand::SetQualityHigh);
+        break;
+    }
+}
+
+void ControlServer::sendAudioEnabled(bool enabled) {
+    sendCommand(ControlCommand::SetAudioEnabled, {static_cast<uint8_t>(enabled ? 1 : 0)});
 }
 
 double ControlServer::ping(int timeoutMs) {
@@ -148,22 +179,15 @@ void ControlServer::receiveLoop() {
 void ControlServer::sendCommand(ControlCommand cmd, const std::vector<uint8_t> &payload) {
     if (m_socket == INVALID_SOCK) return;
 
-    std::string host;
-    uint16_t    port;
+    sockaddr_in dest{};
     {
         std::lock_guard<std::mutex> lk(m_targetMutex);
-        host = m_targetHost;
-        port = m_targetPort;
+        if (!m_targetResolved) return;
+        dest = m_targetAddr;
     }
-    if (host.empty()) return;
 
     ControlPacket pkt{cmd, payload};
     auto data = pkt.serialise();
-
-    sockaddr_in dest{};
-    dest.sin_family = AF_INET;
-    dest.sin_port   = htons(port);
-    inet_pton(AF_INET, host.c_str(), &dest.sin_addr);
 
     ::sendto(m_socket,
              reinterpret_cast<const char *>(data.data()),
@@ -171,6 +195,34 @@ void ControlServer::sendCommand(ControlCommand cmd, const std::vector<uint8_t> &
              0,
              reinterpret_cast<const sockaddr *>(&dest),
              sizeof(dest));
+}
+
+bool ControlServer::resolveIPv4Target(const std::string &host, uint16_t port, sockaddr_in &out) {
+    if (host.empty()) return false;
+
+    sockaddr_in dest{};
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, host.c_str(), &dest.sin_addr) == 1) {
+        out = dest;
+        return true;
+    }
+
+    addrinfo hints{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    addrinfo *result = nullptr;
+    if (getaddrinfo(host.c_str(), nullptr, &hints, &result) != 0 || !result || !result->ai_addr) {
+        if (result) freeaddrinfo(result);
+        return false;
+    }
+
+    auto *in = reinterpret_cast<sockaddr_in *>(result->ai_addr);
+    dest.sin_addr = in->sin_addr;
+    freeaddrinfo(result);
+    out = dest;
+    return true;
 }
 
 } // namespace cams

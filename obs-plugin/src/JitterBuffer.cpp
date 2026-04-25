@@ -27,6 +27,7 @@ JitterBuffer::~JitterBuffer() {
 void JitterBuffer::push(PacketHeader header, std::vector<uint8_t> payload) {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
+        m_flushed = false;
 
         // Zero-capacity (pass-through) mode — go directly to ready queue.
         if (m_capacity == 0) {
@@ -40,13 +41,23 @@ void JitterBuffer::push(PacketHeader header, std::vector<uint8_t> payload) {
                                    header.frameType, std::move(payload)});
                 ++m_nextExpected;
                 drainPending();
+            } else if (m_started && sequenceBefore(header.sequenceNumber, m_nextExpected)) {
+                return;
             } else {
                 // Out-of-order or pre-establishment path.
+                auto duplicate = std::find_if(
+                    m_pending.begin(), m_pending.end(),
+                    [&header](const Entry &entry) {
+                        return entry.header.sequenceNumber == header.sequenceNumber;
+                    }
+                );
+                if (duplicate != m_pending.end()) return;
+
                 Entry entry{header, std::move(payload)};
                 auto it = std::lower_bound(
                     m_pending.begin(), m_pending.end(), entry,
                     [](const Entry &a, const Entry &b) {
-                        return a.header.sequenceNumber < b.header.sequenceNumber;
+                        return JitterBuffer::sequenceBefore(a.header.sequenceNumber, b.header.sequenceNumber);
                     }
                 );
                 m_pending.insert(it, std::move(entry));
@@ -112,10 +123,25 @@ void JitterBuffer::flush() {
 }
 
 void JitterBuffer::setCapacity(size_t newCapacity) {
-    flush();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        // Clear pending/ready without setting m_flushed — that flag is
+        // reserved for pipeline shutdown and would permanently kill the
+        // decoder thread.
+        m_pending.clear();
+        m_ready.clear();
+        m_started      = false;
+        m_nextExpected = 0;
+        m_capacity     = newCapacity;
+    }
+    // Wake the consumer so it can re-evaluate; m_flushed is still false,
+    // so pop() will simply loop back and wait for new data.
+    m_cv.notify_all();
+}
+
+size_t JitterBuffer::capacity() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_capacity = newCapacity;
-    m_flushed  = false;
+    return m_capacity;
 }
 
 size_t JitterBuffer::size() const {
@@ -150,6 +176,10 @@ DecodedFrame JitterBuffer::dequeueReady() {
     DecodedFrame frame = std::move(m_ready.front());
     m_ready.pop_front();
     return frame;
+}
+
+bool JitterBuffer::sequenceBefore(uint32_t a, uint32_t b) {
+    return static_cast<int32_t>(a - b) < 0;
 }
 
 } // namespace cams

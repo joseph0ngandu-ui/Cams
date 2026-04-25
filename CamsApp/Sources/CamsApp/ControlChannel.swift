@@ -21,6 +21,14 @@ public protocol ControlChannelDelegate: AnyObject, Sendable {
     func controlChannel(_ channel: ControlChannel, didReceiveExposureLock locked: Bool)
     /// The OBS plugin has requested an immediate IDR keyframe.
     func controlChannelDidRequestKeyframe(_ channel: ControlChannel)
+    /// The OBS plugin has requested a video quality preset.
+    func controlChannel(_ channel: ControlChannel, didRequestQuality quality: StreamQuality)
+    /// The OBS plugin has requested that audio capture be enabled or disabled.
+    func controlChannel(_ channel: ControlChannel, didRequestAudioEnabled enabled: Bool)
+    /// The OBS plugin has sent a control packet, revealing its host endpoint.
+    func controlChannel(_ channel: ControlChannel, didDiscoverOBSEndpoint host: String, port: UInt16)
+    /// A control command failed locally before it could be applied.
+    func controlChannel(_ channel: ControlChannel, didFailWithError error: Error)
 }
 
 // MARK: - ControlChannel
@@ -64,16 +72,24 @@ public final class ControlChannel: @unchecked Sendable {
             guard let self else { return }
             switch state {
             case .failed(let error):
+                self.notifyFailure(error)
                 // Listener failed — retry after a short delay.
                 self.queue.asyncAfter(deadline: .now() + 2.0) {
                     guard !self.isStopped else { return }
-                    try? self.start()
+                    do {
+                        try self.start()
+                    } catch {
+                        self.notifyFailure(error)
+                    }
                 }
-                _ = error  // Error logged implicitly via debugDescription
             case .cancelled:
                 if !self.isStopped {
                     self.queue.asyncAfter(deadline: .now() + 1.0) {
-                        try? self.start()
+                        do {
+                            try self.start()
+                        } catch {
+                            self.notifyFailure(error)
+                        }
                     }
                 }
             default:
@@ -91,11 +107,14 @@ public final class ControlChannel: @unchecked Sendable {
 
     /// Stops listening.
     public func stop() {
-        isStopped = true
-        listener?.cancel()
-        listener = nil
-        activeConnections.forEach { $0.cancel() }
-        activeConnections.removeAll()
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.isStopped = true
+            self.listener?.cancel()
+            self.listener = nil
+            self.activeConnections.forEach { $0.cancel() }
+            self.activeConnections.removeAll()
+        }
     }
 
     // MARK: - Private helpers
@@ -104,6 +123,10 @@ public final class ControlChannel: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self, weak connection] state in
             guard let self, let connection else { return }
             if case .failed = state {
+                self.queue.async {
+                    self.activeConnections.removeAll { $0 === connection }
+                }
+            } else if case .cancelled = state {
                 self.queue.async {
                     self.activeConnections.removeAll { $0 === connection }
                 }
@@ -120,33 +143,59 @@ public final class ControlChannel: @unchecked Sendable {
             guard let self, let connection else { return }
             if let data, let packet = CamsControlPacket.deserialise(from: data) {
                 self.handleCommand(packet, replyTo: connection)
+            } else if let data, !data.isEmpty {
+                self.notifyFailure(ControlChannelError.invalidCommand)
             }
-            if error == nil && !isComplete {
+            if let error {
+                self.notifyFailure(error)
+            }
+            if error == nil && !self.isStopped {
                 self.receiveNextMessage(on: connection)
             }
+            _ = isComplete
         }
     }
 
     private func handleCommand(_ packet: CamsControlPacket, replyTo connection: NWConnection) {
+        notifyDiscoveredEndpoint(from: connection)
+
         switch packet.command {
         case .lockFocus:
-            applyFocusMode(.locked)
-            delegate?.controlChannel(self, didReceiveFocusLock: true)
+            if applyFocusMode(.locked) {
+                delegate?.controlChannel(self, didReceiveFocusLock: true)
+            }
 
         case .unlockFocus:
-            applyFocusMode(.continuousAutoFocus)
-            delegate?.controlChannel(self, didReceiveFocusLock: false)
+            if applyFocusMode(.continuousAutoFocus) {
+                delegate?.controlChannel(self, didReceiveFocusLock: false)
+            }
 
         case .lockExposure:
-            applyExposureMode(.locked)
-            delegate?.controlChannel(self, didReceiveExposureLock: true)
+            if applyExposureMode(.locked) {
+                delegate?.controlChannel(self, didReceiveExposureLock: true)
+            }
 
         case .unlockExposure:
-            applyExposureMode(.continuousAutoExposure)
-            delegate?.controlChannel(self, didReceiveExposureLock: false)
+            if applyExposureMode(.continuousAutoExposure) {
+                delegate?.controlChannel(self, didReceiveExposureLock: false)
+            }
 
         case .requestKeyframe:
+            encoder?.requestKeyframe()
             delegate?.controlChannelDidRequestKeyframe(self)
+
+        case .setQualityLow:
+            delegate?.controlChannel(self, didRequestQuality: .low)
+
+        case .setQualityMedium:
+            delegate?.controlChannel(self, didRequestQuality: .medium)
+
+        case .setQualityHigh:
+            delegate?.controlChannel(self, didRequestQuality: .high)
+
+        case .setAudioEnabled:
+            let enabled = packet.payload.first.map { $0 != 0 } ?? true
+            delegate?.controlChannel(self, didRequestAudioEnabled: enabled)
 
         case .ping:
             // Reply with a pong on the same connection.
@@ -161,30 +210,82 @@ public final class ControlChannel: @unchecked Sendable {
 
     // MARK: - Camera control helpers
 
-    private func applyFocusMode(_ mode: AVCaptureDevice.FocusMode) {
-        guard let device = captureDevice else { return }
+    private func applyFocusMode(_ mode: AVCaptureDevice.FocusMode) -> Bool {
+        guard let device = captureDevice else {
+            notifyFailure(ControlChannelError.noCaptureDevice)
+            return false
+        }
         do {
             try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
             if device.isFocusModeSupported(mode) {
                 device.focusMode = mode
+                return true
+            } else {
+                notifyFailure(ControlChannelError.unsupportedFocusMode)
+                return false
             }
-            device.unlockForConfiguration()
         } catch {
-            // Device locked by another process — silently ignore; the focus
-            // state remains unchanged.
+            notifyFailure(error)
+            return false
         }
     }
 
-    private func applyExposureMode(_ mode: AVCaptureDevice.ExposureMode) {
-        guard let device = captureDevice else { return }
+    private func applyExposureMode(_ mode: AVCaptureDevice.ExposureMode) -> Bool {
+        guard let device = captureDevice else {
+            notifyFailure(ControlChannelError.noCaptureDevice)
+            return false
+        }
         do {
             try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
             if device.isExposureModeSupported(mode) {
                 device.exposureMode = mode
+                return true
+            } else {
+                notifyFailure(ControlChannelError.unsupportedExposureMode)
+                return false
             }
-            device.unlockForConfiguration()
         } catch {
-            // Device locked by another process — silently ignore.
+            notifyFailure(error)
+            return false
+        }
+    }
+
+    private func notifyFailure(_ error: Error) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.controlChannel(self, didFailWithError: error)
+        }
+    }
+
+    private func notifyDiscoveredEndpoint(from connection: NWConnection) {
+        guard case let .hostPort(host, port) = connection.endpoint else { return }
+        let hostString = "\(host)"
+        let portValue = port.rawValue
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.delegate?.controlChannel(self, didDiscoverOBSEndpoint: hostString, port: portValue)
+        }
+    }
+}
+
+public enum ControlChannelError: LocalizedError {
+    case invalidCommand
+    case noCaptureDevice
+    case unsupportedFocusMode
+    case unsupportedExposureMode
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidCommand:
+            return "Received an invalid control command."
+        case .noCaptureDevice:
+            return "No active camera is available for remote control."
+        case .unsupportedFocusMode:
+            return "The selected camera does not support the requested focus mode."
+        case .unsupportedExposureMode:
+            return "The selected camera does not support the requested exposure mode."
         }
     }
 }

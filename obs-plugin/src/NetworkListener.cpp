@@ -8,11 +8,20 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <optional>
 #include <vector>
 
 #ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #pragma comment(lib, "Ws2_32.lib")
 static bool wsaInitialised = false;
+#else
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 namespace cams {
@@ -59,6 +68,11 @@ void NetworkListener::stop() {
 void NetworkListener::setPacketCallback(PacketCallback cb) {
     std::lock_guard<std::mutex> lk(m_callbackMutex);
     m_packetCallback = std::move(cb);
+}
+
+void NetworkListener::setLossCallback(LossCallback cb) {
+    std::lock_guard<std::mutex> lk(m_callbackMutex);
+    m_lossCallback = std::move(cb);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +126,11 @@ void NetworkListener::destroySocket() {
 // Receive loop
 // ---------------------------------------------------------------------------
 
+static uint64_t getCurrentTimeMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 void NetworkListener::receiveLoop() {
     // Maximum expected packet size: 64 KB (max UDP datagram).
     static constexpr size_t kBufSize = 65536;
@@ -145,29 +164,145 @@ void NetworkListener::receiveLoop() {
             continue;
         }
 
-        if (static_cast<size_t>(n) < kHeaderSize) continue;
+        if (static_cast<size_t>(n) < kHeaderSize) {
+            recordInvalidPacket("short datagram");
+            continue;
+        }
 
         auto headerOpt = PacketHeader::deserialise(buf.data(), static_cast<size_t>(n));
-        if (!headerOpt) continue;
+        if (!headerOpt) {
+            recordInvalidPacket("invalid header");
+            continue;
+        }
 
         const PacketHeader &hdr = *headerOpt;
         size_t payloadStart = kHeaderSize;
         size_t payloadLen   = static_cast<size_t>(n) - kHeaderSize;
 
         // Validate declared payload length.
-        if (hdr.payloadLength > payloadLen) continue;
+        if (hdr.payloadLength != payloadLen) {
+            recordInvalidPacket("payload length mismatch");
+            continue;
+        }
 
         std::vector<uint8_t> payload(
             buf.begin() + static_cast<ptrdiff_t>(payloadStart),
             buf.begin() + static_cast<ptrdiff_t>(payloadStart + hdr.payloadLength)
         );
 
-        PacketCallback cb;
-        {
-            std::lock_guard<std::mutex> lk(m_callbackMutex);
-            cb = m_packetCallback;
+        if (hdr.fragmentCount <= 1) {
+            // Unfragmented or single-fragment mode
+            PacketCallback cb;
+            {
+                std::lock_guard<std::mutex> lk(m_callbackMutex);
+                cb = m_packetCallback;
+            }
+            if (cb) cb(hdr, std::move(payload));
+        } else {
+            // Reassembly logic
+            std::vector<uint8_t> fullPayload;
+            PacketHeader fullHeader;
+            bool complete = false;
+
+            bool lossDetected = false;
+            const char *lossReason = nullptr;
+            bool assemblyValid = true;
+
+            {
+                std::lock_guard<std::mutex> lk(m_assemblyMutex);
+                uint64_t now = getCurrentTimeMs();
+
+                // Periodic cleanup of stale fragments (timeout = 1000ms)
+                for (auto it = m_assemblyMap.begin(); it != m_assemblyMap.end(); ) {
+                    if (now - it->second.receiveTimeMs > 1000) {
+                        lossDetected = true;
+                        lossReason = "fragment reassembly timeout";
+                        it = m_assemblyMap.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+
+                auto& assembly = m_assemblyMap[hdr.timestamp];
+                if (assembly.fragments.empty()) {
+                    assembly.timestamp = hdr.timestamp;
+                    assembly.receiveTimeMs = now;
+                    assembly.fragmentCount = hdr.fragmentCount;
+                    assembly.fragments.resize(hdr.fragmentCount);
+                    assembly.header = hdr;
+                } else if (assembly.fragmentCount != hdr.fragmentCount ||
+                           assembly.header.frameType != hdr.frameType) {
+                    m_assemblyMap.erase(hdr.timestamp);
+                    lossDetected = true;
+                    lossReason = "fragment metadata changed";
+                    assemblyValid = false;
+                } else {
+                    // Update receive time to prevent premature timeout
+                    assembly.receiveTimeMs = now;
+                }
+
+                if (!assemblyValid) {
+                    // Metadata conflict already invalidated this partial frame.
+                } else if (assembly.totalExpectedLength + hdr.payloadLength > 16 * 1024 * 1024) {
+                    m_assemblyMap.erase(hdr.timestamp);
+                    lossDetected = true;
+                    lossReason = "reassembled frame too large";
+                } else if (!assembly.fragments[hdr.fragmentIndex].has_value()) {
+                    assembly.fragments[hdr.fragmentIndex] = std::move(payload);
+                    assembly.fragmentsReceived++;
+                    assembly.totalExpectedLength += hdr.payloadLength;
+
+                    if (assembly.fragmentsReceived == assembly.fragmentCount) {
+                        // We have all fragments
+                        fullPayload.reserve(assembly.totalExpectedLength);
+                        for (auto& frag : assembly.fragments) {
+                            if (frag.has_value()) {
+                                fullPayload.insert(fullPayload.end(), frag->begin(), frag->end());
+                            }
+                        }
+
+                        fullHeader = assembly.header;
+                        fullHeader.payloadLength = (uint32_t)fullPayload.size();
+                        fullHeader.fragmentCount = 1;
+                        fullHeader.fragmentIndex = 0;
+
+                        m_assemblyMap.erase(hdr.timestamp);
+                        complete = true;
+                    }
+                }
+            }
+
+            if (lossDetected) {
+                notifyLoss(lossReason);
+            }
+
+            if (complete) {
+                PacketCallback cb;
+                {
+                    std::lock_guard<std::mutex> lk(m_callbackMutex);
+                    cb = m_packetCallback;
+                }
+                if (cb) cb(fullHeader, std::move(fullPayload));
+            }
         }
-        if (cb) cb(hdr, std::move(payload));
+    }
+}
+
+void NetworkListener::notifyLoss(const char *reason) {
+    LossCallback cb;
+    {
+        std::lock_guard<std::mutex> lk(m_callbackMutex);
+        cb = m_lossCallback;
+    }
+    if (cb) cb(reason);
+}
+
+void NetworkListener::recordInvalidPacket(const char *reason) {
+    uint64_t count = ++m_invalidPacketCount;
+    if (count <= 5 || count % 100 == 0) {
+        fprintf(stderr, "[Cams] Dropped malformed packet (%s), count=%llu\n",
+                reason,
+                static_cast<unsigned long long>(count));
     }
 }
 
@@ -268,7 +403,11 @@ void DNSSD_API NetworkListener::browseCB(
     const char          *replyDomain,
     void                *context
 ) {
-    if (errorCode != kDNSServiceErr_NoError) return;
+    if (errorCode != kDNSServiceErr_NoError || context == nullptr ||
+        serviceName == nullptr || regtype == nullptr || replyDomain == nullptr)
+    {
+        return;
+    }
     auto *self = static_cast<NetworkListener *>(context);
 
     if (flags & kDNSServiceFlagsAdd) {
@@ -280,8 +419,16 @@ void DNSSD_API NetworkListener::browseCB(
             &NetworkListener::resolveCB, context
         );
         if (err == kDNSServiceErr_NoError) {
-            // Process the resolve synchronously.
-            DNSServiceProcessResult(resolveRef);
+            int fd = DNSServiceRefSockFD(resolveRef);
+            if (fd >= 0) {
+                fd_set readfds;
+                FD_ZERO(&readfds);
+                FD_SET(fd, &readfds);
+                timeval tv{1, 0};
+                if (select(fd + 1, &readfds, nullptr, nullptr, &tv) > 0) {
+                    DNSServiceProcessResult(resolveRef);
+                }
+            }
             DNSServiceRefDeallocate(resolveRef);
         }
     } else {
@@ -302,7 +449,11 @@ void DNSSD_API NetworkListener::resolveCB(
     const unsigned char */*txtRecord*/,
     void                *context
 ) {
-    if (errorCode != kDNSServiceErr_NoError) return;
+    if (errorCode != kDNSServiceErr_NoError || context == nullptr ||
+        fullname == nullptr || hosttarget == nullptr)
+    {
+        return;
+    }
     auto *self = static_cast<NetworkListener *>(context);
 
     // Extract instance name from fullname ("Name._cams-video._udp.local.")
@@ -310,7 +461,11 @@ void DNSSD_API NetworkListener::resolveCB(
     auto dot = name.find('.');
     if (dot != std::string::npos) name = name.substr(0, dot);
 
-    self->addDevice({name, std::string(hosttarget), ntohs(port)});
+    // Keep the DNS-SD hostname here. ControlServer resolves targets on a background
+    // worker so Bonjour callbacks never block the discovery thread.
+    std::string ip = hosttarget;
+
+    self->addDevice({name, ip, ntohs(port)});
 }
 
 #endif  // CAMS_HAS_DNSSD

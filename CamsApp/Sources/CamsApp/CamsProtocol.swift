@@ -23,7 +23,7 @@ public let kCamsVideoPort: UInt16 = 8888
 /// UDP port for the bidirectional control back-channel.
 public let kCamsControlPort: UInt16 = 8889
 /// Wire-format header size in bytes.
-public let kCamsHeaderSize: Int = 17
+public let kCamsHeaderSize: Int = 21
 
 // MARK: - Frame Types
 
@@ -37,6 +37,8 @@ public enum FrameType: UInt8, Sendable {
     case parameterSets = 0x03
     /// Keyframe (IDR) marker — same codec as the current session.
     case keyframe  = 0x04
+    /// Raw PCM audio payload.
+    case audioPCM  = 0x10
     /// End-of-stream signal.
     case eos       = 0xFF
 
@@ -44,6 +46,7 @@ public enum FrameType: UInt8, Sendable {
     public var isVideoData: Bool {
         switch self {
         case .h264, .hevc, .keyframe, .parameterSets: return true
+        case .audioPCM: return false
         case .eos: return false
         }
     }
@@ -63,6 +66,14 @@ public enum ControlCommand: UInt8, Sendable {
     case unlockExposure = 0x04
     /// Request an immediate keyframe (IDR) from the encoder.
     case requestKeyframe = 0x05
+    /// Switch to low quality preset.
+    case setQualityLow   = 0x06
+    /// Switch to medium quality preset.
+    case setQualityMedium = 0x07
+    /// Switch to high quality preset.
+    case setQualityHigh  = 0x08
+    /// Enable/disable audio transport.
+    case setAudioEnabled = 0x09
     /// Ping — used to measure round-trip latency.
     case ping          = 0xFE
     /// Pong — response to a ping.
@@ -77,6 +88,8 @@ public struct CamsPacketHeader: Sendable {
     public let sequenceNumber: UInt32
     public let timestamp: UInt64
     public let frameType: FrameType
+    public let fragmentIndex: UInt16
+    public let fragmentCount: UInt16
     public let payloadLength: UInt32
 
     // MARK: Initialisation
@@ -86,17 +99,21 @@ public struct CamsPacketHeader: Sendable {
         sequenceNumber: UInt32,
         timestamp: UInt64,
         frameType: FrameType,
+        fragmentIndex: UInt16 = 0,
+        fragmentCount: UInt16 = 1,
         payloadLength: UInt32
     ) {
         self.sequenceNumber = sequenceNumber
         self.timestamp      = timestamp
         self.frameType      = frameType
+        self.fragmentIndex  = fragmentIndex
+        self.fragmentCount  = fragmentCount
         self.payloadLength  = payloadLength
     }
 
     // MARK: Serialisation
 
-    /// Encodes the header into exactly `kCamsHeaderSize` (17) bytes in big-endian order.
+    /// Encodes the header into exactly `kCamsHeaderSize` (21) bytes in big-endian order.
     public func serialise() -> Data {
         var data = Data(capacity: kCamsHeaderSize)
         // Sequence number — 4 bytes, big-endian.
@@ -107,6 +124,12 @@ public struct CamsPacketHeader: Sendable {
         withUnsafeBytes(of: &ts) { data.append(contentsOf: $0) }
         // Frame type — 1 byte.
         data.append(frameType.rawValue)
+        // Fragment index — 2 bytes, big-endian.
+        var fIndex = fragmentIndex.bigEndian
+        withUnsafeBytes(of: &fIndex) { data.append(contentsOf: $0) }
+        // Fragment count — 2 bytes, big-endian.
+        var fCount = fragmentCount.bigEndian
+        withUnsafeBytes(of: &fCount) { data.append(contentsOf: $0) }
         // Payload length — 4 bytes, big-endian.
         var len = payloadLength.bigEndian
         withUnsafeBytes(of: &len) { data.append(contentsOf: $0) }
@@ -122,19 +145,44 @@ public struct CamsPacketHeader: Sendable {
         guard data.count >= kCamsHeaderSize else { return nil }
 
         let bytes = data.withUnsafeBytes { $0 }
-
-        let seqBE   = bytes.load(fromByteOffset: 0,  as: UInt32.self)
-        let tsBE    = bytes.load(fromByteOffset: 4,  as: UInt64.self)
-        let ftByte  = bytes.load(fromByteOffset: 12, as: UInt8.self)
-        let lenBE   = bytes.load(fromByteOffset: 13, as: UInt32.self)
+        // Header fields are not naturally aligned, so decode byte-by-byte to avoid misaligned raw-pointer loads.
+        let seqBE =
+            (UInt32(bytes[0]) << 24) |
+            (UInt32(bytes[1]) << 16) |
+            (UInt32(bytes[2]) << 8)  |
+            UInt32(bytes[3])
+        let tsBE =
+            (UInt64(bytes[4]) << 56) |
+            (UInt64(bytes[5]) << 48) |
+            (UInt64(bytes[6]) << 40) |
+            (UInt64(bytes[7]) << 32) |
+            (UInt64(bytes[8]) << 24) |
+            (UInt64(bytes[9]) << 16) |
+            (UInt64(bytes[10]) << 8) |
+            UInt64(bytes[11])
+        let ftByte = UInt8(bytes[12])
+        let fIndexBE =
+            (UInt16(bytes[13]) << 8) |
+            UInt16(bytes[14])
+        let fCountBE =
+            (UInt16(bytes[15]) << 8) |
+            UInt16(bytes[16])
+        let lenBE =
+            (UInt32(bytes[17]) << 24) |
+            (UInt32(bytes[18]) << 16) |
+            (UInt32(bytes[19]) << 8)  |
+            UInt32(bytes[20])
 
         guard let frameType = FrameType(rawValue: ftByte) else { return nil }
+        guard fCountBE > 0, fIndexBE < fCountBE else { return nil }
 
         return CamsPacketHeader(
-            sequenceNumber: UInt32(bigEndian: seqBE),
-            timestamp:      UInt64(bigEndian: tsBE),
+            sequenceNumber: seqBE,
+            timestamp:      tsBE,
             frameType:      frameType,
-            payloadLength:  UInt32(bigEndian: lenBE)
+            fragmentIndex:  fIndexBE,
+            fragmentCount:  fCountBE,
+            payloadLength:  lenBE
         )
     }
 }

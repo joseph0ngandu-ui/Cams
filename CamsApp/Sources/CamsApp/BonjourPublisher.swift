@@ -81,12 +81,23 @@ public final class BonjourPublisher: @unchecked Sendable {
         params.allowLocalEndpointReuse = true
 
         do {
-            let l = try NWListener(using: params)
+            // Bind to the actual video port so the OBS plugin gets the
+            // correct port from Bonjour service resolution.
+            let l = try NWListener(
+                using: params,
+                on: NWEndpoint.Port(rawValue: kCamsVideoPort)!
+            )
 
-            // Advertise with Bonjour.
+            // Advertise with Bonjour — include video/control ports in TXT.
+            let txtItems: [String: String] = [
+                "videoPort":   "\(kCamsVideoPort)",
+                "controlPort": "\(kCamsControlPort)"
+            ]
+            let txtData = NWTXTRecord(txtItems)
             l.service = NWListener.Service(
                 name: serviceName,
-                type: kCamsServiceType
+                type: kCamsServiceType,
+                txtRecord: txtData
             )
 
             l.serviceRegistrationUpdateHandler = { [weak self] change in
@@ -94,7 +105,7 @@ public final class BonjourPublisher: @unchecked Sendable {
                 switch change {
                 case .add(let endpoint):
                     if case let .service(name, _, _, _) = endpoint {
-                        self.port = l.port?.rawValue ?? 0
+                        self.port = kCamsVideoPort
                         let publishedName = name
                         DispatchQueue.main.async {
                             self.delegate?.bonjourPublisherDidPublish(self, name: publishedName)
@@ -112,13 +123,12 @@ public final class BonjourPublisher: @unchecked Sendable {
                 switch state {
                 case .ready:
                     self.retryCount = 0
-                    self.port = l.port?.rawValue ?? 0
+                    self.port = kCamsVideoPort
 
                 case .failed(let error):
                     DispatchQueue.main.async {
                         self.delegate?.bonjourPublisherDidFail(self, error: error)
                     }
-                    // Retry with back-off.
                     self.scheduleRetry()
 
                 case .cancelled:
@@ -129,8 +139,7 @@ public final class BonjourPublisher: @unchecked Sendable {
                 }
             }
 
-            // We don't need to handle new connections (UDP is connectionless),
-            // but NWListener requires a newConnectionHandler to stay active.
+            // UDP is connectionless; NWListener still requires a handler.
             l.newConnectionHandler = { connection in
                 connection.cancel()
             }
