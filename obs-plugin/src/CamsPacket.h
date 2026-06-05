@@ -112,6 +112,7 @@ enum class ControlCommand : uint8_t {
     SetQualityMedium = 0x07,
     SetQualityHigh   = 0x08,
     SetAudioEnabled  = 0x09, ///< Reserved for future audio transport.
+    SetCenterStageEnabled = 0x0A, ///< Enable/disable subject tracking. Payload: 0x00=off, 0x01=on.
     Ping             = 0xFE,
     Pong             = 0xFF,
 };
@@ -233,6 +234,7 @@ struct ControlPacket {
         case ControlCommand::SetQualityMedium:
         case ControlCommand::SetQualityHigh:
         case ControlCommand::SetAudioEnabled:
+        case ControlCommand::SetCenterStageEnabled:
         case ControlCommand::Ping:
         case ControlCommand::Pong:
             pkt.command = static_cast<ControlCommand>(data[0]);

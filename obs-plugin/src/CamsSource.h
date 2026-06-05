@@ -78,6 +78,11 @@ private:
     std::string m_manualHost;
     BufferMode  m_bufferMode = BufferMode::Stable;
     int         m_qualityPreset = 2; // 0 low, 1 medium, 2 high
+    bool        m_centerStageEnabled = false;
+
+    // ── Telemetry counters ─────────────────────────────────────────────────
+    std::atomic<uint64_t> m_framesReassembled{0};
+    std::atomic<uint64_t> m_framesDropped{0};
 
     // ── OBS frame output ─────────────────────────────────────────────────
     obs_source_frame m_obsFrame{};
@@ -98,6 +103,8 @@ private:
     static bool onRefreshDevicesClicked(
         obs_properties_t *props, obs_property_t *prop, void *data);
     static bool onActivateClicked(
+        obs_properties_t *props, obs_property_t *prop, void *data);
+    static bool onCenterStageToggleClicked(
         obs_properties_t *props, obs_property_t *prop, void *data);
 };
 

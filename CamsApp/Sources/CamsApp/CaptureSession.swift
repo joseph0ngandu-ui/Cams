@@ -30,6 +30,8 @@ public protocol CaptureSessionDelegate: AnyObject, Sendable {
     func captureSession(_ session: CaptureSession, didDisconnectTransport error: Error?)
     /// Called when network congestion forces the encoder to reduce bitrate.
     func captureSession(_ session: CaptureSession, didApplyBackpressureBitrate bitrate: Int)
+    /// Called for each packet successfully handed to the kernel, for bitrate telemetry.
+    func captureSession(_ session: CaptureSession, didSendBytes byteCount: Int)
 }
 
 // MARK: - CaptureSession
@@ -44,6 +46,10 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
     public let transport: NetworkTransport
     public var previewSession: AVCaptureSession { avSession }
     public private(set) weak var captureDevice: AVCaptureDevice?
+    /// Subject-tracking engine (software or hardware Center Stage).
+    public var centerStageEngine: CenterStageEngine?
+    /// Human-readable label for the current device thermal tier.
+    public private(set) var thermalTierLabel: String = "Nominal"
 
     // MARK: Private state
 
@@ -213,6 +219,11 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
         encoder.requestKeyframe()
     }
 
+    /// Enables or disables Center Stage subject tracking.
+    public func setCenterStageEnabled(_ enabled: Bool) {
+        centerStageEngine?.setEnabled(enabled)
+    }
+
     // MARK: - Thermal state management
 
     private func observeThermalState() {
@@ -232,15 +243,22 @@ public final class CaptureSession: NSObject, @unchecked Sendable {
         var newBitrate = currentConfig.targetBitrate
 
         switch state {
-        case .nominal, .fair:
+        case .nominal:
+            thermalTierLabel = "Nominal"
+            newBitrate = currentConfig.targetBitrate
+        case .fair:
+            thermalTierLabel = "Fair"
             newBitrate = currentConfig.targetBitrate
         case .serious:
+            thermalTierLabel = "Serious"
             // Halve bitrate to reduce heat.
             newBitrate = currentConfig.targetBitrate / 2
         case .critical:
+            thermalTierLabel = "Critical"
             // Minimum viable bitrate — 25% of nominal.
             newBitrate = currentConfig.targetBitrate / 4
         @unknown default:
+            thermalTierLabel = "Unknown"
             break
         }
 
@@ -298,9 +316,11 @@ extension CaptureSession: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard let rawBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        // Encode directly; the encoder returns the buffer to the pool when done.
+        // Route through CenterStageEngine for software subject tracking when enabled.
+        // On the hardware path (isCenterStageEnabled=true), `process` is a no-op passthrough.
+        let pixelBuffer = centerStageEngine?.process(pixelBuffer: rawBuffer) ?? rawBuffer
         encoder.encode(pixelBuffer: pixelBuffer, presentationTime: pts, pool: nil)
     }
 
@@ -499,6 +519,10 @@ extension CaptureSession: NetworkTransportDelegate {
             guard let self else { return }
             self.delegate?.captureSession(self, didDisconnectTransport: error)
         }
+    }
+
+    public func transportDidSendBytes(_ transport: NetworkTransport, byteCount: Int) {
+        delegate?.captureSession(self, didSendBytes: byteCount)
     }
 
     public func transportNeedsBackpressure(

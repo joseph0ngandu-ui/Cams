@@ -75,6 +75,11 @@ void NetworkListener::setLossCallback(LossCallback cb) {
     m_lossCallback = std::move(cb);
 }
 
+void NetworkListener::setReassemblerLossCallback(FrameReassembler::LossCallback cb) {
+    std::lock_guard<std::mutex> lk(m_assemblyMutex);
+    m_reassembler.setLossCallback(std::move(cb));
+}
+
 // ---------------------------------------------------------------------------
 // Socket helpers
 // ---------------------------------------------------------------------------
@@ -110,6 +115,27 @@ bool NetworkListener::createSocket(uint16_t port) {
         CLOSE_SOCK(m_socket);
         m_socket = INVALID_SOCK;
         return false;
+    }
+
+    // Expand the socket receive buffer to 8 MB to absorb high-bitrate 4K bursts.
+    // On macOS, kern.ipc.maxsockbuf caps this at 8 MB by default; the kernel
+    // silently grants whatever it can.
+    {
+        const int rcvBuf = 8 * 1024 * 1024;  // 8 MB
+#ifdef _WIN32
+        setsockopt(m_socket, SOL_SOCKET, SO_RCVBUF,
+                   reinterpret_cast<const char *>(&rcvBuf), sizeof(rcvBuf));
+#else
+        if (setsockopt(m_socket, SOL_SOCKET, SO_RCVBUF, &rcvBuf, sizeof(rcvBuf)) != 0) {
+            fprintf(stderr, "[Cams] SO_RCVBUF 8 MB request failed: %s\n",
+                    strerror(errno));
+        } else {
+            int actual = 0;
+            socklen_t len = sizeof(actual);
+            getsockopt(m_socket, SOL_SOCKET, SO_RCVBUF, &actual, &len);
+            fprintf(stderr, "[Cams] SO_RCVBUF set; kernel granted %d bytes\n", actual);
+        }
+#endif
     }
 
     return true;

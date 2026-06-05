@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cams documentation — setup guides, protocol reference, control commands, and build instructions." />
+  <title>CAMS — Documentation</title>
+  <link rel="stylesheet" href="./src/styles/main.css" />
+</head>
+<body class="bg-surface-lowest text-on-surface font-body overflow-x-hidden">
+
+<!-- ─── Nav ──────────────────────────────────────────────────────────── -->
+<nav class="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-6 border-b border-[#353534] bg-surface-lowest/95 backdrop-blur-md" style="border-bottom: 0.5px solid #353534;">
+  <a href="/" class="flex items-center gap-2 text-on-surface hover:text-white transition-colors">
+    <span class="material-symbols-outlined text-[18px] text-emerald">sensors</span>
+    <span class="font-mono text-[13px] font-bold tracking-[0.14em] uppercase">CAMS</span>
+  </a>
+  <div class="hidden md:flex items-center gap-6">
+    <a href="/#features"  class="nav-link">Features</a>
+    <a href="/#protocol"  class="nav-link">Protocol</a>
+    <a href="/#obs"       class="nav-link">OBS</a>
+    <a href="docs.html"   class="nav-link active">Docs</a>
+  </div>
+  <a href="/#download" class="btn-primary text-[10px] hidden md:flex">
+    <span class="material-symbols-outlined text-[14px]">download</span>
+    Download
+  </a>
+  <button id="nav-toggle" class="md:hidden p-1 text-on-surface-variant hover:text-on-surface">
+    <span class="material-symbols-outlined text-[22px]">menu</span>
+  </button>
+</nav>
+
+<!-- Mobile menu -->
+<div id="nav-mobile" class="hidden fixed top-12 left-0 right-0 z-40 border-b border-[#353534] bg-surface-lowest/98 backdrop-blur-md p-4 flex flex-col gap-3 md:hidden">
+  <a href="/#features" class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">Features</a>
+  <a href="/#protocol" class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">Protocol</a>
+  <a href="/#obs"      class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">OBS Integration</a>
+  <a href="#getting-started" class="nav-link text-[12px] py-2">Getting Started</a>
+</div>
+
+<!-- ─── Docs layout ──────────────────────────────────────────────────── -->
+<div class="flex pt-12 min-h-screen">
+
+  <!-- Sidebar -->
+  <aside class="hidden lg:flex flex-col w-64 fixed top-12 bottom-0 overflow-y-auto no-scrollbar" style="border-right: 0.5px solid #353534; background: #0a0a0a;">
+    <div class="p-4 pt-6 flex flex-col gap-6">
+
+      <div class="flex flex-col gap-1">
+        <div class="data-label px-2 mb-2">Getting Started</div>
+        <a href="#getting-started" class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Overview</a>
+        <a href="#requirements"    class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Requirements</a>
+        <a href="#quick-start"     class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Quick Start</a>
+      </div>
+
+      <div class="hairline"></div>
+
+      <div class="flex flex-col gap-1">
+        <div class="data-label px-2 mb-2">iOS App</div>
+        <a href="#ios-setup"    class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Setup</a>
+        <a href="#ios-controls" class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Controls &amp; UI</a>
+        <a href="#ios-quality"  class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Quality Presets</a>
+        <a href="#center-stage" class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Subject Tracking</a>
+        <a href="#telemetry"    class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Telemetry HUD</a>
+      </div>
+
+      <div class="hairline"></div>
+
+      <div class="flex flex-col gap-1">
+        <div class="data-label px-2 mb-2">OBS Plugin</div>
+        <a href="#obs-setup"    class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Installation</a>
+        <a href="#obs-config"   class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Configuration</a>
+        <a href="#obs-pipeline" class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Receive Pipeline</a>
+      </div>
+
+      <div class="hairline"></div>
+
+      <div class="flex flex-col gap-1">
+        <div class="data-label px-2 mb-2">Protocol Reference</div>
+        <a href="#protocol"          class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Wire Format</a>
+        <a href="#frame-types"       class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Frame Types</a>
+        <a href="#control-commands"  class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Control Commands</a>
+        <a href="#fragmentation"     class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Fragmentation</a>
+      </div>
+
+      <div class="hairline"></div>
+
+      <div class="flex flex-col gap-1">
+        <div class="data-label px-2 mb-2">Build &amp; Test</div>
+        <a href="#build-ios"   class="sidebar-link nav-link px-2 py-1.5 text-[11px]">iOS App</a>
+        <a href="#build"       class="sidebar-link nav-link px-2 py-1.5 text-[11px]">OBS Plugin</a>
+        <a href="#tests"       class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Running Tests</a>
+      </div>
+
+      <div class="hairline"></div>
+
+      <div class="flex flex-col gap-1">
+        <div class="data-label px-2 mb-2">Troubleshooting</div>
+        <a href="#faq"     class="sidebar-link nav-link px-2 py-1.5 text-[11px]">FAQ</a>
+        <a href="#network" class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Network Issues</a>
+        <a href="#thermal" class="sidebar-link nav-link px-2 py-1.5 text-[11px]">Thermal Throttling</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="flex-1 lg:ml-64 max-w-4xl mx-auto px-6 lg:px-12 py-12">
+
+    <!-- Page header -->
+    <div class="mb-12">
+      <span class="section-label mb-3">Documentation</span>
+      <h1 class="font-display text-display-lg font-bold tracking-tight text-on-surface mt-4 mb-4">Cams Reference</h1>
+      <p class="text-body-lg text-on-surface-variant max-w-2xl">
+        Everything you need to set up, configure, and extend the Cams wireless camera system.
+      </p>
+    </div>
+
+    <!-- ─ Getting Started ─ -->
+    <section id="getting-started" class="mb-16">
+      <h2 class="font-display text-display-sm font-bold tracking-tight text-on-surface mb-3">Getting Started</h2>
+      <div class="hairline mb-6"></div>
+
+      <p class="text-body-lg text-on-surface-variant mb-6">
+        Cams is a two-component system: an iOS app that captures and encodes video, and an OBS Studio plugin that receives and decodes it. They communicate over a custom UDP protocol on your local Wi-Fi network.
+      </p>
+
+      <div class="panel p-5 mb-6 flex items-start gap-3">
+        <span class="material-symbols-outlined text-emerald text-[20px] mt-0.5 flex-shrink-0">info</span>
+        <p class="text-body-md text-on-surface-variant">
+          Cams requires both the iOS app and the OBS plugin to be on the <strong class="text-on-surface">same local network</strong> (same Wi-Fi router). Cross-subnet and VPN configurations are not currently supported.
+        </p>
+      </div>
+    </section>
+
+    <!-- ─ Requirements ─ -->
+    <section id="requirements" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Requirements</h2>
+      <div class="hairline mb-6"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-px" style="border: 0.5px solid #353534;">
+        <div class="panel p-5">
+          <div class="data-label mb-3">iOS App</div>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              iOS 16.0 or later
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              iPhone 12 or later (for HEVC hardware encoder)
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              Camera access permission
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              Local network access permission
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-amber" style="width:4px;height:4px;flex-shrink:0;"></div>
+              iPad with Ultra Wide camera (for hardware Center Stage)
+            </li>
+          </ul>
+        </div>
+        <div class="panel p-5">
+          <div class="data-label mb-3">OBS Plugin</div>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              OBS Studio 30.0 or later
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              macOS 13+ / Windows 10+ / Ubuntu 22.04+
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              FFmpeg (for build) — Homebrew on macOS
+            </li>
+            <li class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <div class="led led-emerald" style="width:4px;height:4px;flex-shrink:0;"></div>
+              CMake 3.20+ and a C++17 compiler
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─ Quick Start ─ -->
+    <section id="quick-start" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Quick Start</h2>
+      <div class="hairline mb-6"></div>
+
+      <ol class="space-y-6">
+        <li class="flex gap-4">
+          <div class="flex-shrink-0 w-7 h-7 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+            <span class="font-mono text-[10px] font-bold text-emerald">1</span>
+          </div>
+          <div>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface mb-1">Install the iOS app</h3>
+            <p class="text-body-md text-on-surface-variant">Download Cams from the App Store. Grant camera and local network permissions when prompted.</p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <div class="flex-shrink-0 w-7 h-7 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+            <span class="font-mono text-[10px] font-bold text-amber">2</span>
+          </div>
+          <div>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface mb-1">Install the OBS plugin</h3>
+            <p class="text-body-md text-on-surface-variant mb-2">Download <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">obs-cams</code> from the GitHub Releases page and place it in your OBS plugins directory.</p>
+            <div class="code-block">
+              <span class="cm"># macOS</span><br/>
+              ~/Library/Application Support/obs-studio/plugins/<br/>
+              <br/>
+              <span class="cm"># Windows</span><br/>
+              %AppData%\obs-studio\plugins\<br/>
+              <br/>
+              <span class="cm"># Linux</span><br/>
+              ~/.config/obs-studio/plugins/
+            </div>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <div class="flex-shrink-0 w-7 h-7 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+            <span class="font-mono text-[10px] font-bold text-amber">3</span>
+          </div>
+          <div>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface mb-1">Add a Cams source in OBS</h3>
+            <p class="text-body-md text-on-surface-variant">In OBS, click the <strong class="text-on-surface">+</strong> button under Sources, choose <em class="text-on-surface">Cams</em>, and click OK. The plugin immediately starts browsing for devices.</p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <div class="flex-shrink-0 w-7 h-7 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+            <span class="font-mono text-[10px] font-bold text-emerald">4</span>
+          </div>
+          <div>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface mb-1">Open Cams on your iPhone</h3>
+            <p class="text-body-md text-on-surface-variant">Select a quality preset and tap <strong class="text-on-surface">Start Streaming</strong>. Within a few seconds, the status pill should turn emerald: <strong class="text-emerald">OBS LINKED</strong>.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ─ iOS Controls ─ -->
+    <section id="ios-controls" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Controls &amp; UI</h2>
+      <div class="hairline mb-6"></div>
+
+      <div class="space-y-4">
+        <div class="panel p-5 flex flex-col gap-2">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-amber text-[20px]">center_focus_strong</span>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface">Focus Lock</h3>
+          </div>
+          <p class="text-body-md text-on-surface-variant">
+            Tapping locks the camera focus at the current focal plane. The button turns amber and an LED indicator lights. OBS can also remotely toggle focus lock via the control channel — the button shows a distinct dashed emerald ring for remote-originated state.
+          </p>
+        </div>
+        <div class="panel p-5 flex flex-col gap-2">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-amber text-[20px]">wb_sunny</span>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface">Exposure Lock</h3>
+          </div>
+          <p class="text-body-md text-on-surface-variant">
+            Locks exposure at the current value, preventing the camera from automatically adjusting to lighting changes. Identical remote control behavior to Focus Lock.
+          </p>
+        </div>
+        <div class="panel p-5 flex flex-col gap-2">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-emerald text-[20px]">person_search</span>
+            <h3 class="font-display font-semibold text-body-lg text-on-surface">Subject Tracking</h3>
+          </div>
+          <p class="text-body-md text-on-surface-variant">
+            On supported iPads, uses hardware Center Stage. On all other devices, the CenterStageEngine uses <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">VNDetectHumanRectanglesRequest</code> with exponential smoothing (α=0.15) and a Metal-backed CIContext for crop/scale. OBS can toggle this remotely.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─ Quality Presets ─ -->
+    <section id="ios-quality" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Quality Presets</h2>
+      <div class="hairline mb-6"></div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[520px] border-collapse">
+          <thead>
+            <tr style="border-bottom: 0.5px solid #353534;">
+              <th class="data-label text-left py-3 pr-4">Preset</th>
+              <th class="data-label text-left py-3 pr-4">Resolution</th>
+              <th class="data-label text-left py-3 pr-4">FPS</th>
+              <th class="data-label text-left py-3 pr-4">Bitrate</th>
+              <th class="data-label text-left py-3">Codec</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface">Low</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">1280 × 720</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">30</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">4 Mbps</td>
+              <td class="py-3 font-mono text-mono-md text-on-surface-variant">HEVC</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b; background: rgba(0,230,57,0.03);">
+              <td class="py-3 pr-4 font-mono text-mono-md text-emerald">Medium</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">1920 × 1080</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">30</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">8 Mbps</td>
+              <td class="py-3 font-mono text-mono-md text-on-surface-variant">HEVC</td>
+            </tr>
+            <tr>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface">High</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">3840 × 2160</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-amber">60</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">50 Mbps</td>
+              <td class="py-3 font-mono text-mono-md text-on-surface-variant">HEVC</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-body-sm text-on-surface-variant mt-4">
+        All presets use a 2-second GOP, CABAC entropy for H.264, MaxAllowedFrameQP=40 for HEVC, and <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">AllowTemporalCompression=true</code>. The quality selector is locked while streaming.
+      </p>
+    </section>
+
+    <!-- ─ Telemetry ─ -->
+    <section id="telemetry" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Telemetry HUD</h2>
+      <div class="hairline mb-6"></div>
+
+      <p class="text-body-md text-on-surface-variant mb-6">
+        The Telemetry HUD appears automatically when streaming begins. All three metrics update on a 1-second rolling window.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-px" style="border: 0.5px solid #353534;">
+        <div class="panel p-5">
+          <div class="data-label mb-2">Outgoing Bitrate</div>
+          <div class="font-mono text-[22px] font-bold text-on-surface mb-2">7.4 <span class="text-[12px] font-normal text-on-surface-variant">Mbps</span></div>
+          <p class="text-body-sm text-on-surface-variant">Actual bytes sent, averaged over 1 second. Changes immediately when thermal throttle engages.</p>
+        </div>
+        <div class="panel p-5">
+          <div class="data-label mb-2">Packet Drops/Sec</div>
+          <div class="font-mono text-[22px] font-bold text-on-surface mb-2">0 <span class="text-[12px] font-normal text-on-surface-variant">drops/s</span></div>
+          <p class="text-body-sm text-on-surface-variant">Increments when backpressure causes a whole frame to be dropped. Turns amber if value exceeds 0.</p>
+        </div>
+        <div class="panel p-5">
+          <div class="data-label mb-2">Thermal State</div>
+          <div class="font-mono text-[22px] font-bold text-emerald mb-2">NOMINAL</div>
+          <p class="text-body-sm text-on-surface-variant">
+            Nominal/Fair = white. Serious = amber (bitrate halved). Critical = red (bitrate quartered).
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─ OBS Plugin Setup ─ -->
+    <section id="obs-setup" class="mb-16">
+      <h2 class="font-display text-display-sm font-bold tracking-tight text-on-surface mb-3">OBS Plugin</h2>
+      <div class="hairline mb-6"></div>
+
+      <h3 class="font-display font-semibold text-headline-md text-on-surface mb-3">Installation</h3>
+      <p class="text-body-md text-on-surface-variant mb-4">
+        The plugin ships as a shared library (<code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">obs-cams.so</code> / <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">obs-cams.dll</code> / <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">obs-cams.plugin</code>). Place it in your OBS plugins directory and restart OBS.
+      </p>
+
+      <h3 class="font-display font-semibold text-headline-md text-on-surface mb-3 mt-8">Remote Control from OBS</h3>
+      <p class="text-body-md text-on-surface-variant mb-4">
+        The OBS plugin exposes control buttons in the source properties panel:
+      </p>
+      <ul class="space-y-2 mb-6">
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-emerald mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span><strong class="text-on-surface">Center Stage</strong> — toggles subject tracking on the iOS device. The iOS UI updates immediately with a distinct emerald-dashed ring indicating OBS origin.</span>
+        </li>
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-amber mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span><strong class="text-on-surface">Request Keyframe</strong> — sends an immediate IDR frame request. Useful when cutting between camera sources.</span>
+        </li>
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-amber mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span><strong class="text-on-surface">Focus / Exposure Lock</strong> — locks or releases the AVCaptureDevice modes remotely.</span>
+        </li>
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-amber mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span><strong class="text-on-surface">Quality Preset</strong> — switches between Low, Medium, and High while streaming. The iOS quality selector reflects the change immediately.</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ─ Protocol Reference ─ -->
+    <section id="protocol" class="mb-16">
+      <h2 class="font-display text-display-sm font-bold tracking-tight text-on-surface mb-3">Wire Format</h2>
+      <div class="hairline mb-6"></div>
+
+      <p class="text-body-md text-on-surface-variant mb-6">
+        Every UDP packet on port 8888 begins with a 21-byte big-endian fixed header, followed by raw NAL unit bytes.
+      </p>
+
+      <div class="code-block mb-6">
+        <span class="cm">// CamsPacketHeader — 21 bytes total, all fields big-endian</span><br/>
+        <span class="kw">struct</span> CamsPacketHeader {<br/>
+        &nbsp;&nbsp;<span class="fn">UInt32</span>  sequenceNumber;    <span class="cm">// bytes 0–3  — per-frame, shared by all fragments</span><br/>
+        &nbsp;&nbsp;<span class="fn">UInt64</span>  timestamp;         <span class="cm">// bytes 4–11 — nanoseconds, mach_absolute_time</span><br/>
+        &nbsp;&nbsp;<span class="fn">UInt8</span>   frameType;         <span class="cm">// byte  12   — see FrameType enum</span><br/>
+        &nbsp;&nbsp;<span class="fn">UInt16</span>  fragmentIndex;     <span class="cm">// bytes 13–14 — 0-based, validated &lt; fragmentCount</span><br/>
+        &nbsp;&nbsp;<span class="fn">UInt16</span>  fragmentCount;     <span class="cm">// bytes 15–16 — max 256 (kCamsMaxFragmentsPerFrame)</span><br/>
+        &nbsp;&nbsp;<span class="fn">UInt32</span>  payloadLength;     <span class="cm">// bytes 17–20 — byte count of NAL payload following header</span><br/>
+        };
+      </div>
+
+      <div class="panel p-5 mb-6 flex items-start gap-3">
+        <span class="material-symbols-outlined text-amber text-[18px] mt-0.5 flex-shrink-0">warning</span>
+        <p class="text-body-md text-on-surface-variant">
+          <strong class="text-on-surface">Protocol sync requirement:</strong> <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">CamsProtocol.swift</code> and <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">CamsPacket.h</code> are the two halves of the wire format definition and must be kept in sync at all times. Any change to the header layout, frame type values, or control command values requires updating <em>both</em> files simultaneously.
+        </p>
+      </div>
+    </section>
+
+    <!-- ─ Frame Types ─ -->
+    <section id="frame-types" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Frame Types</h2>
+      <div class="hairline mb-6"></div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[480px] border-collapse">
+          <thead>
+            <tr style="border-bottom: 0.5px solid #353534;">
+              <th class="data-label text-left py-3 pr-4">Value</th>
+              <th class="data-label text-left py-3 pr-4">Name</th>
+              <th class="data-label text-left py-3 pr-4">isVideoData</th>
+              <th class="data-label text-left py-3">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">0x00</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface">h264</td>
+              <td class="py-3 pr-4 text-emerald text-body-sm">✓</td>
+              <td class="py-3 text-body-sm text-on-surface-variant">H.264 inter (P/B) frame</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">0x01</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface">hevc</td>
+              <td class="py-3 pr-4 text-emerald text-body-sm">✓</td>
+              <td class="py-3 text-body-sm text-on-surface-variant">HEVC inter frame</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">0x02</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface">parameterSets</td>
+              <td class="py-3 pr-4 text-emerald text-body-sm">✓</td>
+              <td class="py-3 text-body-sm text-on-surface-variant">SPS/PPS (H.264) or VPS/SPS/PPS (HEVC)</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">0x03</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-emerald">keyframe</td>
+              <td class="py-3 pr-4 text-emerald text-body-sm">✓</td>
+              <td class="py-3 text-body-sm text-on-surface-variant">IDR / intra-coded (I-frame)</td>
+            </tr>
+            <tr>
+              <td class="py-3 pr-4 font-mono text-mono-md text-on-surface-variant">0x04</td>
+              <td class="py-3 pr-4 font-mono text-mono-md text-garnet">eos</td>
+              <td class="py-3 pr-4 text-on-surface-variant text-body-sm">✗</td>
+              <td class="py-3 text-body-sm text-on-surface-variant">End of stream sentinel</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─ Control Commands ─ -->
+    <section id="control-commands" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Control Commands</h2>
+      <div class="hairline mb-6"></div>
+
+      <p class="text-body-md text-on-surface-variant mb-6">
+        Control packets are sent on UDP port 8889. Each packet begins with a 1-byte command identifier, optionally followed by a payload.
+      </p>
+
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[560px] border-collapse">
+          <thead>
+            <tr style="border-bottom: 0.5px solid #353534;">
+              <th class="data-label text-left py-3 pr-4">Byte</th>
+              <th class="data-label text-left py-3 pr-4">Command</th>
+              <th class="data-label text-left py-3 pr-4">Direction</th>
+              <th class="data-label text-left py-3 pr-4">Payload</th>
+              <th class="data-label text-left py-3">Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-on-surface-variant">0x00</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">ping</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">bi-dir</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Responds with pong (0x00)</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x01</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">lockFocus</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Sets AVCaptureDevice focus to .locked</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x02</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">unlockFocus</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Returns to continuousAutoFocus</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x03</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">lockExposure</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Sets exposure mode to .locked</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x04</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">unlockExposure</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Returns to continuousAutoExposure</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x05</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">requestKeyframe</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Forces immediate IDR frame output</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x06</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">setQualityLow</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Applies 720p 30fps 4 Mbps preset</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x07</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">setQualityMedium</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Applies 1080p 30fps 8 Mbps preset</td>
+            </tr>
+            <tr style="border-bottom: 0.5px solid #1c1b1b;">
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-amber">0x08</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-on-surface">setQualityHigh</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">OBS → iOS</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">none</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Applies 4K 60fps 50 Mbps preset</td>
+            </tr>
+            <tr>
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-emerald">0x0A</td>
+              <td class="py-2.5 pr-4 font-mono text-mono-sm text-emerald">setCenterStageEnabled</td>
+              <td class="py-2.5 pr-4 text-body-sm text-on-surface-variant">bi-dir</td>
+              <td class="py-2.5 pr-4 font-mono text-[11px] text-on-surface-variant">0x01/0x00</td>
+              <td class="py-2.5 text-body-sm text-on-surface-variant">Enables or disables subject tracking</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─ Fragmentation ─ -->
+    <section id="fragmentation" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Fragmentation</h2>
+      <div class="hairline mb-6"></div>
+
+      <p class="text-body-md text-on-surface-variant mb-4">
+        Encoded frames larger than the fragment payload size (1400 bytes) are split into multiple UDP packets. All fragments for one frame share the same <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">sequenceNumber</code>.
+      </p>
+
+      <ul class="space-y-2 mb-6">
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-emerald mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span><code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">fragmentIndex</code> is 0-based and must be strictly less than <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">fragmentCount</code>.</span>
+        </li>
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-emerald mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span>Maximum fragments per frame: <strong class="text-on-surface font-mono">256</strong> (<code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">kCamsMaxFragmentsPerFrame</code>). Frames exceeding this limit throw a <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">CamsPacketisationError.tooManyFragments</code>.</span>
+        </li>
+        <li class="text-body-md text-on-surface-variant flex items-start gap-2">
+          <div class="led led-amber mt-1.5" style="width:4px;height:4px;flex-shrink:0;"></div>
+          <span>The OBS <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">FrameReassembler</code> waits up to <strong class="text-on-surface">1000ms</strong> for all fragments. If any are missing, it fires a LossCallback and requests a keyframe.</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ─ Build ─ -->
+    <section id="build" class="mb-16">
+      <h2 class="font-display text-display-sm font-bold tracking-tight text-on-surface mb-3">Build from Source</h2>
+      <div class="hairline mb-6"></div>
+
+      <h3 class="font-display font-semibold text-headline-md text-on-surface mb-3" id="build-ios">iOS App</h3>
+      <div class="code-block mb-6">
+        <span class="cm"># Generate Xcode project and build (no code signing)</span><br/>
+        <span class="kw">cd</span> CamsApp<br/>
+        xcodegen generate<br/>
+        xcodebuild -project Cams.xcodeproj \<br/>
+        &nbsp;&nbsp;-scheme Cams \<br/>
+        &nbsp;&nbsp;-configuration Debug \<br/>
+        &nbsp;&nbsp;-destination <span class="str">'generic/platform=iOS'</span> \<br/>
+        &nbsp;&nbsp;build CODE_SIGNING_ALLOWED=<span class="num">NO</span><br/>
+        <br/>
+        <span class="cm"># Run SwiftPM unit tests (CamsCore target only)</span><br/>
+        swift test
+      </div>
+
+      <h3 class="font-display font-semibold text-headline-md text-on-surface mb-3">OBS Plugin — macOS</h3>
+      <div class="code-block mb-6">
+        <span class="kw">cd</span> obs-plugin<br/>
+        cmake -B build \<br/>
+        &nbsp;&nbsp;-DOBS_SDK_ROOT=<span class="str">/path/to/obs-studio</span> \<br/>
+        &nbsp;&nbsp;-DFFMPEG_ROOT=<span class="str">/opt/homebrew</span><br/>
+        cmake --build build --parallel<br/>
+        cmake --install build<br/>
+        <br/>
+        <span class="cm"># Install installs to ~/Library/Application Support/obs-studio/plugins/</span>
+      </div>
+
+      <h3 class="font-display font-semibold text-headline-md text-on-surface mb-3">OBS Plugin — Windows</h3>
+      <div class="code-block mb-6">
+        cmake -B build -A x64 \<br/>
+        &nbsp;&nbsp;-DOBS_SDK_ROOT=<span class="str">"C:\obs-studio"</span> \<br/>
+        &nbsp;&nbsp;-DFFMPEG_ROOT=<span class="str">"C:\ffmpeg"</span><br/>
+        cmake --build build --config Release<br/>
+        cmake --install build --config Release
+      </div>
+    </section>
+
+    <!-- ─ Tests ─ -->
+    <section id="tests" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Running Tests</h2>
+      <div class="hairline mb-6"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-px" style="border: 0.5px solid #353534;">
+        <div class="panel p-5">
+          <div class="data-label mb-3">Swift Tests (CamsCore)</div>
+          <div class="code-block text-[11px]">
+            <span class="kw">cd</span> CamsApp<br/>
+            swift test<br/>
+            <span class="cm"># Expected: 21 tests passed</span>
+          </div>
+          <p class="text-body-sm text-on-surface-variant mt-3">Covers <code class="font-mono text-[11px] text-emerald">CamsProtocol.swift</code> and <code class="font-mono text-[11px] text-emerald">NetworkTransport.swift</code>. iOS-framework-dependent files are excluded from the package target.</p>
+        </div>
+        <div class="panel p-5">
+          <div class="data-label mb-3">C++ Tests (standalone)</div>
+          <div class="code-block text-[11px]">
+            cmake -S . -B build \<br/>
+            &nbsp;&nbsp;-DBUILD_PLUGIN=<span class="num">OFF</span> \<br/>
+            &nbsp;&nbsp;-DBUILD_TESTS=<span class="num">ON</span><br/>
+            cmake --build build<br/>
+            ctest --test-dir build \<br/>
+            &nbsp;&nbsp;--output-on-failure<br/>
+            <span class="cm"># Expected: 144 tests passed</span>
+          </div>
+          <p class="text-body-sm text-on-surface-variant mt-3">Runs all C++ tests without requiring OBS or FFmpeg. Includes protocol serialization, jitter buffer, reassembler, and loss callback tests.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─ FAQ ─ -->
+    <section id="faq" class="mb-16">
+      <h2 class="font-display text-display-sm font-bold tracking-tight text-on-surface mb-3">FAQ</h2>
+      <div class="hairline mb-6"></div>
+
+      <div class="space-y-px" style="border: 0.5px solid #353534;">
+
+        <details class="group panel">
+          <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none">
+            <span class="font-display font-semibold text-body-lg text-on-surface">OBS doesn't find my device. What do I check?</span>
+            <span class="material-symbols-outlined text-on-surface-variant text-[20px] group-open:rotate-180 transition-transform">expand_more</span>
+          </summary>
+          <div class="px-5 pb-5 text-body-md text-on-surface-variant border-t border-[#1c1b1b]">
+            <ul class="space-y-2 mt-3">
+              <li>Ensure both devices are on the <strong class="text-on-surface">same Wi-Fi network</strong> (same router / SSID). Most Wi-Fi routers block mDNS between VLANs.</li>
+              <li>Check that the iOS app has <strong class="text-on-surface">Local Network</strong> permission in Settings → Privacy → Local Network.</li>
+              <li>Make sure no firewall is blocking UDP port 8888 on the macOS/Windows machine.</li>
+              <li>If using a managed network (corporate, university), mDNS/Bonjour may be disabled. Use a personal hotspot instead.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="group panel">
+          <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none">
+            <span class="font-display font-semibold text-body-lg text-on-surface">The stream freezes and then recovers. What's happening?</span>
+            <span class="material-symbols-outlined text-on-surface-variant text-[20px] group-open:rotate-180 transition-transform">expand_more</span>
+          </summary>
+          <div class="px-5 pb-5 text-body-md text-on-surface-variant border-t border-[#1c1b1b]">
+            <p class="mt-3">This is typically a packet loss event. The <code class="font-mono text-[12px] text-emerald">FrameReassembler</code> waits up to 1 second for missing fragments before dropping the frame and requesting a new keyframe. The stream resumes automatically on the next IDR frame.</p>
+            <p class="mt-2">Check the <strong class="text-on-surface">Drops/s</strong> counter in the TelemetryHUD. If it's consistently non-zero, move closer to your Wi-Fi router or reduce the quality preset.</p>
+          </div>
+        </details>
+
+        <details class="group panel">
+          <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none">
+            <span class="font-display font-semibold text-body-lg text-on-surface">Why does the bitrate drop automatically?</span>
+            <span class="material-symbols-outlined text-on-surface-variant text-[20px] group-open:rotate-180 transition-transform">expand_more</span>
+          </summary>
+          <div class="px-5 pb-5 text-body-md text-on-surface-variant border-t border-[#1c1b1b]">
+            <p class="mt-3">Two mechanisms can reduce bitrate:</p>
+            <ul class="space-y-2 mt-2">
+              <li><strong class="text-amber">Thermal throttling:</strong> iOS monitors device temperature continuously. At Serious thermal state, bitrate is halved; at Critical, it's quartered. The Thermal readout in the HUD shows the current state.</li>
+              <li><strong class="text-on-surface">Network backpressure:</strong> If the NWConnection send queue fills up (indicating the network can't keep up), the encoder drops whole frames. The Drops/s counter increments.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="group panel">
+          <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none">
+            <span class="font-display font-semibold text-body-lg text-on-surface">Does Center Stage work on all iPhones?</span>
+            <span class="material-symbols-outlined text-on-surface-variant text-[20px] group-open:rotate-180 transition-transform">expand_more</span>
+          </summary>
+          <div class="px-5 pb-5 text-body-md text-on-surface-variant border-t border-[#1c1b1b]">
+            <p class="mt-3">Hardware Center Stage (<code class="font-mono text-[12px] text-emerald">AVCaptureDevice.isCenterStageEnabled</code>) requires an iPad with an Ultra Wide front camera (iPad Pro M1 and later, iPad Air M1 and later).</p>
+            <p class="mt-2">On all other devices — including all iPhones — <code class="font-mono text-[12px] text-emerald">CenterStageEngine</code> automatically falls back to the software path: <code class="font-mono text-[12px] text-emerald">VNDetectHumanRectanglesRequest</code> with α=0.15 exponential smoothing, dispatched on a background Vision queue.</p>
+          </div>
+        </details>
+
+        <details class="group panel">
+          <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none">
+            <span class="font-display font-semibold text-body-lg text-on-surface">Can I use Cams over 5G or a cellular connection?</span>
+            <span class="material-symbols-outlined text-on-surface-variant text-[20px] group-open:rotate-180 transition-transform">expand_more</span>
+          </summary>
+          <div class="px-5 pb-5 text-body-md text-on-surface-variant border-t border-[#1c1b1b]">
+            <p class="mt-3">Not currently. Cams uses Bonjour for zero-config discovery, which requires mDNS on the local network. Cellular and cross-internet routing would require a separate signaling mechanism. This is on the roadmap as a future feature.</p>
+          </div>
+        </details>
+
+      </div>
+    </section>
+
+    <!-- ─ Thermal ─ -->
+    <section id="thermal" class="mb-16">
+      <h2 class="font-display text-headline-lg font-bold tracking-tight text-on-surface mb-3">Thermal Throttling</h2>
+      <div class="hairline mb-6"></div>
+
+      <p class="text-body-md text-on-surface-variant mb-6">
+        iOS reports four thermal states via <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">ProcessInfo.thermalState</code>. Cams responds automatically:
+      </p>
+
+      <div class="space-y-px" style="border: 0.5px solid #353534;">
+        <div class="panel p-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="led led-emerald animate-led-pulse"></div>
+            <span class="font-mono text-mono-md text-emerald">NOMINAL</span>
+          </div>
+          <span class="text-body-sm text-on-surface-variant">No action. Full bitrate.</span>
+        </div>
+        <div class="panel p-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="led led-emerald"></div>
+            <span class="font-mono text-mono-md text-on-surface">FAIR</span>
+          </div>
+          <span class="text-body-sm text-on-surface-variant">No action. Full bitrate.</span>
+        </div>
+        <div class="panel p-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="led led-amber animate-amber-pulse"></div>
+            <span class="font-mono text-mono-md text-amber">SERIOUS</span>
+          </div>
+          <span class="text-body-sm text-on-surface-variant">Bitrate reduced by <strong class="text-amber">50%</strong>. HUD turns amber.</span>
+        </div>
+        <div class="panel p-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="led led-error animate-error-blink"></div>
+            <span class="font-mono text-mono-md text-error animate-error-blink">CRITICAL</span>
+          </div>
+          <span class="text-body-sm text-on-surface-variant">Bitrate reduced by <strong class="text-error">75%</strong>. HUD turns red.</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Footer -->
+<footer class="py-8 px-6 lg:px-12 lg:ml-64" style="border-top: 0.5px solid #353534;">
+  <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-emerald text-[14px]">sensors</span>
+      <span class="font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-on-surface-variant">CAMS Docs</span>
+    </div>
+    <div class="flex gap-4">
+      <a href="/" class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Home</a>
+      <a href="privacy.html" class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Privacy</a>
+      <a href="terms.html"   class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Terms</a>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="./src/scripts/main.js"></script>
+</body>
+</html>

@@ -262,6 +262,31 @@ final class CamsProtocolTests: XCTestCase {
         XCTAssertNil(CamsControlPacket.deserialise(from: data))
     }
 
+    func testSetCenterStageEnabledCommandRoundTrip() {
+        let pkt = CamsControlPacket(command: .setCenterStageEnabled, payload: Data([0x01]))
+        let data = pkt.serialise()
+        // Command byte must be 0x0A.
+        XCTAssertEqual(data.first, 0x0A)
+        guard let parsed = CamsControlPacket.deserialise(from: data) else {
+            XCTFail("Deserialisation returned nil")
+            return
+        }
+        XCTAssertEqual(parsed.command, .setCenterStageEnabled)
+        XCTAssertEqual(parsed.payload, Data([0x01]))
+    }
+
+    func testSetCenterStageDisabledCommandRoundTrip() {
+        let pkt = CamsControlPacket(command: .setCenterStageEnabled, payload: Data([0x00]))
+        let data = pkt.serialise()
+        XCTAssertEqual(data.first, 0x0A)
+        guard let parsed = CamsControlPacket.deserialise(from: data) else {
+            XCTFail("Deserialisation returned nil")
+            return
+        }
+        XCTAssertEqual(parsed.command, .setCenterStageEnabled)
+        XCTAssertEqual(parsed.payload, Data([0x00]))
+    }
+
     // MARK: - Timestamp
 
     func testTimestampIsMonotonicallyIncreasing() {

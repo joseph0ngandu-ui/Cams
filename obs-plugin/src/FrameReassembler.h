@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -26,9 +27,15 @@ struct ReassemblyOutcome {
 
 class FrameReassembler {
 public:
+    /// Callback invoked once per timed-out frame when `expire()` discards it.
+    using LossCallback = std::function<void()>;
+
     ReassemblyOutcome push(PacketHeader header, std::vector<uint8_t> payload, uint64_t nowMs);
     std::vector<const char *> expire(uint64_t nowMs);
     size_t pendingFrameCount() const { return m_assemblyMap.size(); }
+
+    /// Registers a callback fired for each frame dropped by reassembly timeout.
+    void setLossCallback(LossCallback cb) { m_lossCallback = std::move(cb); }
 
 private:
     struct FrameKey {
@@ -65,6 +72,7 @@ private:
     static constexpr uint64_t kFragmentTimeoutMs = 1000;
     static constexpr size_t kMaxReassembledFrameSize = 16 * 1024 * 1024;
 
+    LossCallback m_lossCallback;
     std::unordered_map<FrameKey, FrameAssembly, FrameKeyHash> m_assemblyMap;
 
     static FrameKey keyFor(const PacketHeader &header);

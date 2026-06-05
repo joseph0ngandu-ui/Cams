@@ -53,13 +53,14 @@ static FrameType detectCodecFromAnnexB(const std::vector<uint8_t> &data, FrameTy
 // Settings key constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kSettingDevice     = "device";
-static constexpr const char *kSettingManualHost = "manual_host";
-static constexpr const char *kSettingBufferMode = "buffer_mode";
-static constexpr const char *kSettingFocusLock  = "focus_lock";
-static constexpr const char *kSettingExpLock    = "exposure_lock";
-static constexpr const char *kSettingQuality    = "quality_mode";
-static constexpr const char *kSettingActivate   = "activate_camera";
+static constexpr const char *kSettingDevice       = "device";
+static constexpr const char *kSettingManualHost   = "manual_host";
+static constexpr const char *kSettingBufferMode   = "buffer_mode";
+static constexpr const char *kSettingFocusLock    = "focus_lock";
+static constexpr const char *kSettingExpLock      = "exposure_lock";
+static constexpr const char *kSettingQuality      = "quality_mode";
+static constexpr const char *kSettingActivate     = "activate_camera";
+static constexpr const char *kSettingCenterStage  = "center_stage";
 
 // ---------------------------------------------------------------------------
 // Construction / Destruction
@@ -117,6 +118,7 @@ void CamsSource::getDefaults(obs_data_t *settings) {
     obs_data_set_default_bool(settings, kSettingFocusLock, false);
     obs_data_set_default_bool(settings, kSettingExpLock,   false);
     obs_data_set_default_int(settings, kSettingQuality, 1);
+    obs_data_set_default_bool(settings, kSettingCenterStage, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +213,19 @@ obs_properties_t *CamsSource::getProperties(void *data) {
         props, kSettingExpLock, "Toggle Exposure Lock",
         &CamsSource::onExposureLockClicked
     );
+    obs_properties_add_button(
+        props, kSettingCenterStage, "Toggle Center Stage",
+        &CamsSource::onCenterStageToggleClicked
+    );
+
+    // ── Reassembly health telemetry ───────────────────────────────────────
+    if (self) {
+        std::ostringstream stats;
+        stats << "Frames reassembled: " << self->m_framesReassembled.load()
+              << "   |   Frames dropped: " << self->m_framesDropped.load();
+        obs_properties_add_text(props, "reassembly_stats",
+                                stats.str().c_str(), OBS_TEXT_INFO);
+    }
 
     return props;
 }
@@ -241,6 +256,12 @@ void CamsSource::applySettings(obs_data_t *settings) {
     // Auto-activate: when a target is set, send the full activation sequence
     // so the user doesn't need to click a separate "Activate Camera" button.
     m_qualityPreset = static_cast<int>(obs_data_get_int(settings, kSettingQuality));
+
+    bool newCenterStage = obs_data_get_bool(settings, kSettingCenterStage);
+    if (newCenterStage != m_centerStageEnabled) {
+        m_centerStageEnabled = newCenterStage;
+        m_controlServer->sendCenterStageEnabled(m_centerStageEnabled);
+    }
 
     activateTarget();
 }
@@ -291,6 +312,12 @@ void CamsSource::startPipeline() {
         [this](const char *reason) {
             blog(LOG_WARNING, "[Cams] Packet loss detected: %s; requesting keyframe",
                  reason ? reason : "unknown");
+            m_controlServer->sendKeyframeRequest();
+        }
+    );
+    m_listener->setReassemblerLossCallback(
+        [this]() {
+            ++m_framesDropped;
             m_controlServer->sendKeyframeRequest();
         }
     );
@@ -376,6 +403,7 @@ void CamsSource::decoderLoop() {
         }
 
         bool ok = m_decoder->decode(frame.data, frame.frameType, [this](AVFrame *avFrame) {
+            ++m_framesReassembled;
             outputAVFrame(avFrame);
         });
 
@@ -490,6 +518,24 @@ bool CamsSource::onRefreshDevicesClicked(
         obs_property_list_add_string(
             deviceProp, label.str().c_str(), dev.hostName.c_str());
     }
+    return true;
+}
+
+bool CamsSource::onCenterStageToggleClicked(
+    obs_properties_t * /*props*/,
+    obs_property_t   * /*prop*/,
+    void             *data
+) {
+    auto *self = static_cast<CamsSource *>(data);
+    if (!self) return false;
+
+    obs_data_t *settings = obs_source_get_settings(self->m_source);
+    bool current = obs_data_get_bool(settings, kSettingCenterStage);
+    bool newVal  = !current;
+    self->m_centerStageEnabled = newVal;
+    self->m_controlServer->sendCenterStageEnabled(newVal);
+    obs_data_set_bool(settings, kSettingCenterStage, newVal);
+    obs_data_release(settings);
     return true;
 }
 

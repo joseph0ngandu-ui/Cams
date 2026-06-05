@@ -88,6 +88,7 @@ std::vector<const char *> FrameReassembler::expire(uint64_t nowMs) {
         if (nowMs >= it->second.receiveTimeMs &&
             nowMs - it->second.receiveTimeMs > kFragmentTimeoutMs) {
             lossReasons.push_back("fragment reassembly timeout");
+            if (m_lossCallback) m_lossCallback();
             it = m_assemblyMap.erase(it);
         } else {
             ++it;

@@ -58,6 +58,17 @@ final class StreamingViewModel: ObservableObject {
     @Published var previewSession: AVCaptureSession?
     @Published var activeBitrateMbps: Double?
 
+    // ── Telemetry ─────────────────────────────────────────────────────────
+    @Published var outgoingBitrateMbps: Double = 0.0
+    @Published var packetDropsPerSec: Int = 0
+    @Published var thermalTierLabel: String = "Nominal"
+    @Published var centerStageEnabled: Bool = false
+
+    // Rolling byte counter: accumulated in nonisolated callbacks, flushed by 1-sec timer.
+    private var byteAccumulator: Int = 0
+    private var dropAccumulator: Int = 0
+    private var bitrateTimer: Timer?
+
     private let transport = NetworkTransport()
     private(set) var capture: CaptureSession?
     private var controlChannel = ControlChannel()
@@ -87,8 +98,16 @@ final class StreamingViewModel: ObservableObject {
 
         let session = CaptureSession(encoderConfig: selectedQuality.encoderConfig, transport: transport)
         session.delegate = self
+        let csEngine = CenterStageEngine()
+        csEngine.configure(
+            encoderWidth: selectedQuality.encoderConfig.width,
+            encoderHeight: selectedQuality.encoderConfig.height
+        )
+        session.centerStageEngine = csEngine
         capture = session
         previewSession = session.previewSession
+
+        startBitrateTimer()
 
         controlChannel.captureDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
         controlChannel.encoder = session.encoder
@@ -128,6 +147,8 @@ final class StreamingViewModel: ObservableObject {
     func stopStreaming() {
         startTask?.cancel()
         startTask = nil
+        bitrateTimer?.invalidate()
+        bitrateTimer = nil
         capture?.stopCapture()
         transport.disconnect()
         controlChannel.stop()
@@ -138,6 +159,9 @@ final class StreamingViewModel: ObservableObject {
         isStreaming = false
         isOBSConnected = false
         activeBitrateMbps = nil
+        outgoingBitrateMbps = 0.0
+        packetDropsPerSec = 0
+        thermalTierLabel = "Nominal"
         statusMessage = "Stopped"
     }
 
@@ -201,7 +225,32 @@ final class StreamingViewModel: ObservableObject {
         }
     }
 
+    func toggleCenterStage() {
+        centerStageEnabled.toggle()
+        capture?.setCenterStageEnabled(centerStageEnabled)
+        statusMessage = centerStageEnabled ? "Center Stage on" : "Center Stage off"
+    }
+
+    private func startBitrateTimer() {
+        bitrateTimer?.invalidate()
+        bitrateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.outgoingBitrateMbps = Double(self.byteAccumulator) * 8.0 / 1_000_000.0
+                self.packetDropsPerSec = self.dropAccumulator
+                self.byteAccumulator = 0
+                self.dropAccumulator = 0
+                if let session = self.capture {
+                    self.thermalTierLabel = session.thermalTierLabel
+                }
+            }
+        }
+    }
+
     private func handleStartupFailure(_ error: Error, session: CaptureSession) {
+        bitrateTimer?.invalidate()
+        bitrateTimer = nil
         if capture === session {
             capture = nil
             previewSession = nil
@@ -258,7 +307,15 @@ extension StreamingViewModel: CaptureSessionDelegate {
         Task { @MainActor in
             guard self.capture === session else { return }
             self.activeBitrateMbps = Double(bitrate) / 1_000_000
+            self.dropAccumulator += 1
             self.statusMessage = "Network pressure; bitrate reduced"
+        }
+    }
+
+    nonisolated func captureSession(_ session: CaptureSession, didSendBytes byteCount: Int) {
+        Task { @MainActor in
+            guard self.capture === session else { return }
+            self.byteAccumulator += byteCount
         }
     }
 }
@@ -302,6 +359,14 @@ extension StreamingViewModel: ControlChannelDelegate {
         Task { @MainActor in
             self.applyQuality(quality)
             self.statusMessage = "Quality set by OBS: \(quality.rawValue)"
+        }
+    }
+
+    nonisolated func controlChannel(_ channel: ControlChannel, didSetCenterStageEnabled enabled: Bool) {
+        Task { @MainActor in
+            self.centerStageEnabled = enabled
+            self.capture?.setCenterStageEnabled(enabled)
+            self.statusMessage = enabled ? "Center Stage on (OBS)" : "Center Stage off (OBS)"
         }
     }
 
@@ -351,25 +416,181 @@ extension StreamingViewModel: BonjourPublisherDelegate {
     }
 }
 
+// MARK: - Design Tokens
+
+private extension Color {
+    // Accent palette
+    static let camsEmerald = Color(red: 0,     green: 0.902, blue: 0.224)
+    static let camsGarnet  = Color(red: 0.843, green: 0.231, blue: 0)
+    static let camsAmber   = Color(red: 0.996, green: 0.702, blue: 0)
+
+    // Surface stack — #0e0e0e → #131313 → #1c1b1b → #2a2a2a
+    static let camsBg       = Color(red: 0.055, green: 0.055, blue: 0.055)
+    static let camsTile     = Color(red: 0.075, green: 0.075, blue: 0.075)
+    static let camsPanel    = Color(red: 0.110, green: 0.106, blue: 0.106)
+    static let camsRaised   = Color(red: 0.165, green: 0.165, blue: 0.165)
+
+    // Borders & recessed
+    static let camsHairline = Color(red: 0.208, green: 0.208, blue: 0.204)   // #353534
+    static let camsBorder   = Color(red: 0.267, green: 0.278, blue: 0.282)   // #444748
+    static let camsRecessed = Color(red: 0.039, green: 0.039, blue: 0.039)   // #0a0a0a
+
+    // Text
+    static let camsTextPrimary   = Color(red: 0.898, green: 0.886, blue: 0.882)  // #e5e2e1
+    static let camsTextSecondary = Color(red: 0.769, green: 0.780, blue: 0.784)  // #c4c7c8
+    static let camsTextMuted     = Color(red: 0.557, green: 0.569, blue: 0.573)  // #8e9192
+}
+
+// MARK: - LED Indicator
+
+private struct LEDIndicator: View {
+    enum LEDColor { case emerald, amber, garnet, gray }
+    let color: LEDColor
+
+    var body: some View {
+        Circle()
+            .fill(fill)
+            .frame(width: 7, height: 7)
+            .shadow(color: glow.opacity(0.75), radius: 4)
+    }
+
+    private var fill: Color {
+        switch color {
+        case .emerald: return .camsEmerald
+        case .amber:   return .camsAmber
+        case .garnet:  return .camsGarnet
+        case .gray:    return .camsBorder
+        }
+    }
+
+    private var glow: Color {
+        switch color {
+        case .emerald: return .camsEmerald
+        case .amber:   return .camsAmber
+        case .garnet:  return .camsGarnet
+        case .gray:    return .clear
+        }
+    }
+}
+
+// MARK: - Scanline Overlay
+
+private struct ScanlineOverlay: View {
+    var body: some View {
+        Canvas { context, size in
+            var y: CGFloat = 3
+            while y < size.height {
+                context.fill(
+                    Path(CGRect(x: 0, y: y, width: size.width, height: 1)),
+                    with: .color(.black.opacity(0.04))
+                )
+                y += 4
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Crosshair Reticle
+
+private struct CrosshairReticle: View {
+    var color: Color = Color.white.opacity(0.22)
+
+    var body: some View {
+        Canvas { context, size in
+            let cx = size.width / 2
+            let cy = size.height / 2
+            let r: CGFloat = 40
+            let arm: CGFloat = 12
+
+            func drawCorner(x: CGFloat, y: CGFloat, dx: CGFloat, dy: CGFloat) {
+                var p = Path()
+                p.move(to: CGPoint(x: x, y: y + dy * arm))
+                p.addLine(to: CGPoint(x: x, y: y))
+                p.addLine(to: CGPoint(x: x + dx * arm, y: y))
+                context.stroke(p, with: .color(color), lineWidth: 1)
+            }
+
+            drawCorner(x: cx - r, y: cy - r, dx: +1, dy: +1)
+            drawCorner(x: cx + r, y: cy - r, dx: -1, dy: +1)
+            drawCorner(x: cx - r, y: cy + r, dx: +1, dy: -1)
+            drawCorner(x: cx + r, y: cy + r, dx: -1, dy: -1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Viewfinder Vignette
+
+private struct ViewfinderVignette: View {
+    let isCritical: Bool
+    let hasDrops: Bool
+
+    var body: some View {
+        Group {
+            if isCritical {
+                RadialGradient(
+                    gradient: Gradient(colors: [.clear, Color.camsGarnet.opacity(0.22)]),
+                    center: .center, startRadius: 100, endRadius: 420
+                )
+            } else if hasDrops {
+                RadialGradient(
+                    gradient: Gradient(colors: [.clear, Color.camsAmber.opacity(0.16)]),
+                    center: .center, startRadius: 100, endRadius: 420
+                )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 // MARK: - ContentView
 
 struct ContentView: View {
     @StateObject private var viewModel = StreamingViewModel()
+    @State private var thermalAcknowledged = false
+
+    var isCritical: Bool { viewModel.isStreaming && viewModel.thermalTierLabel == "Critical" }
+    var hasDrops: Bool { viewModel.isStreaming && viewModel.packetDropsPerSec > 0 }
 
     var body: some View {
         ZStack {
-            CameraPreviewView(session: viewModel.previewSession)
-                .ignoresSafeArea()
-                .overlay {
-                    if viewModel.previewSession == nil {
-                        EmptyPreview()
-                    }
-                }
+            // Camera feed or empty state
+            if viewModel.previewSession != nil {
+                CameraPreviewView(session: viewModel.previewSession)
+                    .ignoresSafeArea()
+            } else {
+                EmptyPreview()
+                    .ignoresSafeArea()
+            }
 
+            // Viewfinder FX (no hit-testing)
+            ScanlineOverlay().ignoresSafeArea()
+            CrosshairReticle()
+            ViewfinderVignette(isCritical: isCritical, hasDrops: hasDrops)
+                .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.5), value: isCritical)
+                .animation(.easeInOut(duration: 0.5), value: hasDrops)
+
+            // Main UI overlay
             VStack(spacing: 0) {
                 TopBar(viewModel: viewModel)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
+
+                if hasDrops {
+                    NetworkWarningBanner(drops: viewModel.packetDropsPerSec)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                if viewModel.isStreaming {
+                    TelemetryHUD(viewModel: viewModel)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
 
                 Spacer(minLength: 20)
 
@@ -377,225 +598,626 @@ struct ContentView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 14)
             }
+            .animation(.easeInOut(duration: 0.25), value: viewModel.isStreaming)
+            .animation(.easeInOut(duration: 0.25), value: hasDrops)
+
+            // Thermal critical modal
+            if isCritical && !thermalAcknowledged {
+                ThermalCriticalModal(viewModel: viewModel, acknowledged: $thermalAcknowledged)
+                    .transition(.opacity)
+            }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: viewModel.isStreaming) { streaming in
+            if !streaming { thermalAcknowledged = false }
+        }
+        .onChange(of: viewModel.thermalTierLabel) { label in
+            if label != "Critical" { thermalAcknowledged = false }
+        }
     }
 }
+
+// MARK: - TopBar
 
 private struct TopBar: View {
     @ObservedObject var viewModel: StreamingViewModel
 
     var body: some View {
         HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Cams")
-                    .font(.system(size: 24, weight: .bold))
-                Text(viewModel.localIPAddress == "-" ? "Local network pending" : "\(viewModel.localIPAddress):\(viewModel.localVideoPort)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.72))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("CAMS")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.camsTextPrimary)
+                    .tracking(3)
+                Text(ipPortText)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.camsTextMuted)
             }
 
             Spacer()
 
-            StatusPill(title: viewModel.connectionTitle, message: viewModel.statusMessage, tint: viewModel.statusTint)
+            StatusPill(viewModel: viewModel)
+        }
+    }
+
+    private var ipPortText: String {
+        let ip = viewModel.localIPAddress
+        if ip == "-" { return "PENDING · \(viewModel.localVideoPort)" }
+        return "\(ip) · \(viewModel.localVideoPort)"
+    }
+}
+
+// MARK: - StatusPill
+
+private struct StatusPill: View {
+    @ObservedObject var viewModel: StreamingViewModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            LEDIndicator(color: ledColor)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(viewModel.connectionTitle.uppercased())
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.camsTextPrimary)
+                    .lineLimit(1)
+                Text(viewModel.statusMessage)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.camsTextMuted)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.camsTile)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.camsHairline, lineWidth: 0.5)
+        )
+        .frame(maxWidth: 230, alignment: .trailing)
+    }
+
+    private var ledColor: LEDIndicator.LEDColor {
+        if viewModel.isOBSConnected { return .emerald }
+        if viewModel.isStarting || viewModel.isStreaming { return .amber }
+        return .gray
+    }
+}
+
+// MARK: - Network Warning Banner
+
+private struct NetworkWarningBanner: View {
+    let drops: Int
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(Color.camsAmber)
+                .frame(width: 3)
+
+            HStack(spacing: 10) {
+                LEDIndicator(color: .amber)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("NETWORK PRESSURE")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.camsAmber)
+                        .tracking(1)
+                    Text("\(drops) drops/sec · bitrate auto-reduced")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.camsTextSecondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+        .background(Color.camsTile)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.camsAmber.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - TelemetryHUD
+
+private struct TelemetryHUD: View {
+    @ObservedObject var viewModel: StreamingViewModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            TelemetryCell(label: "BITRATE", value: bitrateText, unit: "Mbps")
+            hairlineV
+            TelemetryCell(
+                label: "DROPS",
+                value: "\(viewModel.packetDropsPerSec)",
+                unit: "/sec",
+                accent: viewModel.packetDropsPerSec > 0 ? Color.camsAmber : nil
+            )
+            hairlineV
+            TelemetryCell(
+                label: "THERMAL",
+                value: viewModel.thermalTierLabel.uppercased(),
+                unit: "",
+                accent: thermalAccent
+            )
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 52)
+        .background(Color.camsPanel.opacity(0.92))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.camsHairline, lineWidth: 0.5)
+        )
+    }
+
+    private var hairlineV: some View {
+        Rectangle()
+            .fill(Color.camsHairline)
+            .frame(width: 0.5)
+            .padding(.vertical, 10)
+    }
+
+    private var bitrateText: String {
+        let mbps = viewModel.outgoingBitrateMbps
+        return mbps >= 10 ? String(format: "%.0f", mbps) : String(format: "%.1f", mbps)
+    }
+
+    private var thermalAccent: Color? {
+        switch viewModel.thermalTierLabel {
+        case "Serious":  return .camsAmber
+        case "Critical": return .camsGarnet
+        default:         return nil
         }
     }
 }
+
+private struct TelemetryCell: View {
+    let label: String
+    let value: String
+    let unit: String
+    var accent: Color? = nil
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color.camsTextMuted)
+                .tracking(1.5)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(accent ?? Color.camsTextPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.camsTextMuted)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - ControlDock
 
 private struct ControlDock: View {
     @ObservedObject var viewModel: StreamingViewModel
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
-                MetricTile(title: "Quality", value: viewModel.selectedQuality.title, footnote: "\(viewModel.selectedQuality.detail) fps")
-                MetricTile(title: "Bitrate", value: bitrateText, footnote: "Mbps")
-                MetricTile(title: "Control", value: "\(viewModel.localControlPort)", footnote: "UDP")
+        VStack(spacing: 0) {
+            // Metric tiles
+            HStack(spacing: 0) {
+                MetricTile(label: "QUALITY", value: viewModel.selectedQuality.title,
+                           footnote: "\(viewModel.selectedQuality.detail) FPS")
+                hairlineV.padding(.vertical, 10)
+                MetricTile(label: "BITRATE", value: bitrateText, footnote: "Mbps")
+                hairlineV.padding(.vertical, 10)
+                MetricTile(label: "CTRL", value: "\(viewModel.localControlPort)", footnote: "UDP")
             }
+            .frame(height: 56)
 
-            Picker("Quality", selection: $viewModel.selectedQuality) {
-                ForEach(StreamQuality.allCases) { quality in
-                    Text(quality.title).tag(quality)
-                }
+            hairlineH
+
+            // Quality picker
+            QualityPicker(viewModel: viewModel)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+
+            hairlineH
+
+            // Button row
+            HStack(spacing: 0) {
+                PrimaryStreamButton(viewModel: viewModel)
+                hairlineV
+                IconToggleButton(
+                    systemImage: "scope", label: "FOCUS",
+                    isActive: viewModel.focusLocked, activeColor: .amber
+                ) { viewModel.toggleFocusLock() }
+                .frame(width: 72)
+                hairlineV
+                IconToggleButton(
+                    systemImage: "sun.max.fill", label: "EXPOSE",
+                    isActive: viewModel.exposureLocked, activeColor: .amber
+                ) { viewModel.toggleExposureLock() }
+                .frame(width: 72)
+                hairlineV
+                IconToggleButton(
+                    systemImage: "person.crop.rectangle.fill", label: "TRACK",
+                    isActive: viewModel.centerStageEnabled, activeColor: .emerald
+                ) { viewModel.toggleCenterStage() }
+                .frame(width: 72)
             }
-            .pickerStyle(.segmented)
-            .onChange(of: viewModel.selectedQuality) { quality in
-                viewModel.applyQuality(quality)
-            }
-
-            HStack(spacing: 10) {
-                PrimaryStreamButton(
-                    isStreaming: viewModel.isStreaming,
-                    isStarting: viewModel.isStarting,
-                    action: {
-                        if viewModel.isStreaming || viewModel.isStarting {
-                            viewModel.stopStreaming()
-                        } else {
-                            viewModel.startStreaming()
-                        }
-                    }
-                )
-
-                IconToggleButton(systemImage: "scope", title: "Focus", isActive: viewModel.focusLocked) {
-                    viewModel.toggleFocusLock()
-                }
-
-                IconToggleButton(systemImage: "sun.max.fill", title: "Exposure", isActive: viewModel.exposureLocked) {
-                    viewModel.toggleExposureLock()
-                }
-
-            }
+            .frame(height: 72)
         }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(Color.camsPanel)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.camsHairline, lineWidth: 0.5)
         )
     }
 
+    private var hairlineH: some View {
+        Rectangle().fill(Color.camsHairline).frame(height: 0.5)
+    }
+
+    private var hairlineV: some View {
+        Rectangle().fill(Color.camsHairline).frame(width: 0.5).frame(maxHeight: .infinity)
+    }
+
     private var bitrateText: String {
-        guard let mbps = viewModel.activeBitrateMbps else { return "-" }
+        guard let mbps = viewModel.activeBitrateMbps else { return "—" }
         return mbps >= 10 ? String(format: "%.0f", mbps) : String(format: "%.1f", mbps)
     }
 }
 
-private struct PrimaryStreamButton: View {
-    let isStreaming: Bool
-    let isStarting: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: iconName)
-                    .font(.system(size: 24, weight: .semibold))
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .frame(maxWidth: .infinity, minHeight: 62)
-            .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .foregroundStyle(.white)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var title: String {
-        if isStarting { return "Starting" }
-        return isStreaming ? "Stop" : "Start"
-    }
-
-    private var iconName: String {
-        if isStarting { return "dot.radiowaves.left.and.right" }
-        return isStreaming ? "stop.fill" : "video.fill"
-    }
-
-    private var background: Color {
-        isStreaming || isStarting ? .red : .blue
-    }
-}
-
-private struct IconToggleButton: View {
-    let systemImage: String
-    let title: String
-    let isActive: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 21, weight: .semibold))
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .frame(width: 68, height: 62)
-            .background(isActive ? Color.orange : Color.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .foregroundStyle(isActive ? .white : .white.opacity(0.88))
-        }
-        .buttonStyle(.plain)
-    }
-}
+// MARK: - MetricTile
 
 private struct MetricTile: View {
-    let title: String
+    let label: String
     let value: String
     let footnote: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.58))
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color.camsTextMuted)
+                .tracking(1)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.camsTextPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(footnote)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .lineLimit(1)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.camsTextMuted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 }
 
-private struct StatusPill: View {
-    let title: String
-    let message: String
-    let tint: Color
+// MARK: - Quality Picker
+
+private struct QualityPicker: View {
+    @ObservedObject var viewModel: StreamingViewModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(tint)
-                .frame(width: 9, height: 9)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption.weight(.bold))
-                    .lineLimit(1)
-                Text(message)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(1)
+        HStack(spacing: 0) {
+            ForEach(Array(StreamQuality.allCases.enumerated()), id: \.element.id) { index, quality in
+                if index > 0 {
+                    Rectangle()
+                        .fill(Color.camsHairline)
+                        .frame(width: 0.5)
+                        .frame(maxHeight: .infinity)
+                }
+                Button {
+                    viewModel.applyQuality(quality)
+                } label: {
+                    VStack(spacing: 2) {
+                        Text(quality.title)
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        Text("\(quality.detail) fps")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(
+                                viewModel.selectedQuality == quality
+                                    ? Color.camsTextMuted
+                                    : Color.camsTextMuted.opacity(0.6)
+                            )
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(
+                        viewModel.selectedQuality == quality
+                            ? Color.camsRaised
+                            : Color.clear
+                    )
+                    .foregroundStyle(
+                        viewModel.selectedQuality == quality
+                            ? Color.camsTextPrimary
+                            : Color.camsTextMuted
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.black.opacity(0.42), in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
-        .frame(maxWidth: 230, alignment: .trailing)
+        .frame(height: 36)
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.camsHairline, lineWidth: 0.5)
+        )
     }
 }
+
+// MARK: - Primary Stream Button
+
+private struct PrimaryStreamButton: View {
+    @ObservedObject var viewModel: StreamingViewModel
+
+    var body: some View {
+        Button {
+            if viewModel.isStreaming || viewModel.isStarting {
+                viewModel.stopStreaming()
+            } else {
+                viewModel.startStreaming()
+            }
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: iconName)
+                    .font(.system(size: 20, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color.camsTextPrimary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(StreamButtonStyle(isDestructive: viewModel.isStreaming || viewModel.isStarting))
+    }
+
+    private var title: String {
+        if viewModel.isStarting { return "STARTING" }
+        return viewModel.isStreaming ? "STOP" : "START"
+    }
+
+    private var iconName: String {
+        if viewModel.isStarting { return "dot.radiowaves.left.and.right" }
+        return viewModel.isStreaming ? "stop.fill" : "video.fill"
+    }
+}
+
+private struct StreamButtonStyle: ButtonStyle {
+    let isDestructive: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Group {
+                    if isDestructive {
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.55, green: 0.13, blue: 0),
+                                Color(red: 0.42, green: 0.08, blue: 0)
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    } else {
+                        LinearGradient(
+                            colors: [Color(white: 0.14), Color(white: 0.09)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    }
+                }
+            )
+            .overlay(
+                Rectangle().stroke(
+                    isDestructive ? Color.camsGarnet.opacity(0.5) : Color(white: 0.20),
+                    lineWidth: 0.5
+                )
+            )
+            .opacity(configuration.isPressed ? 0.72 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Icon Toggle Button
+
+private struct IconToggleButton: View {
+    enum ActiveColor { case amber, emerald }
+
+    let systemImage: String
+    let label: String
+    let isActive: Bool
+    let activeColor: ActiveColor
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                Text(label)
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(labelColor)
+                    .tracking(1)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                Group {
+                    if isActive {
+                        Color.camsRecessed
+                    } else {
+                        LinearGradient(
+                            colors: [Color(white: 0.14), Color(white: 0.09)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    }
+                }
+            )
+            .overlay(
+                Rectangle().stroke(
+                    isActive ? activeBorderColor.opacity(0.85) : Color(white: 0.20),
+                    lineWidth: isActive ? 1 : 0.5
+                )
+                .shadow(color: isActive ? activeBorderColor.opacity(0.25) : .clear, radius: 6)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var activeBorderColor: Color {
+        activeColor == .amber ? .camsAmber : .camsEmerald
+    }
+
+    private var iconColor: Color {
+        isActive ? activeBorderColor : Color.camsTextSecondary
+    }
+
+    private var labelColor: Color {
+        isActive ? activeBorderColor : Color.camsTextMuted
+    }
+}
+
+// MARK: - Empty Preview
 
 private struct EmptyPreview: View {
     var body: some View {
-        LinearGradient(
-            colors: [.black, Color(red: 0.06, green: 0.07, blue: 0.08), Color(red: 0.02, green: 0.03, blue: 0.04)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            VStack(spacing: 14) {
+        ZStack {
+            Color.camsBg
+
+            ScanlineOverlay()
+
+            CrosshairReticle(color: Color.camsHairline)
+
+            VStack(spacing: 16) {
                 Image(systemName: "camera.aperture")
-                    .font(.system(size: 54, weight: .light))
-                    .foregroundStyle(.white.opacity(0.82))
-                Text("Ready for OBS")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.86))
+                    .font(.system(size: 52, weight: .ultraLight))
+                    .foregroundStyle(Color.camsTextMuted)
+
+                VStack(spacing: 4) {
+                    Text("NO FEED")
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.camsTextSecondary)
+                        .tracking(4)
+                    Text("READY FOR OBS")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.camsTextMuted)
+                        .tracking(2.5)
+                }
             }
         }
     }
 }
+
+// MARK: - Thermal Critical Modal
+
+private struct ThermalCriticalModal: View {
+    @ObservedObject var viewModel: StreamingViewModel
+    @Binding var acknowledged: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.70)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Header row
+                HStack(spacing: 10) {
+                    LEDIndicator(color: .garnet)
+                    Text("THERMAL CRITICAL")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.camsGarnet)
+                        .tracking(1.5)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.camsGarnet.opacity(0.10))
+
+                Rectangle().fill(Color.camsGarnet.opacity(0.35)).frame(height: 0.5)
+
+                // Body
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Device temperature is critical. Video quality has been automatically reduced to protect hardware.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color.camsTextSecondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Quality readout
+                    HStack {
+                        Text("AUTO-REDUCED TO")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.camsTextMuted)
+                            .tracking(1)
+                        Spacer()
+                        Text("\(viewModel.selectedQuality.title) · \(bitrateText) Mbps")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.camsGarnet)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color.camsRecessed)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 2)
+                            .stroke(Color.camsGarnet.opacity(0.3), lineWidth: 0.5)
+                    )
+                }
+                .padding(16)
+
+                Rectangle().fill(Color.camsHairline).frame(height: 0.5)
+
+                // Acknowledge button
+                Button {
+                    acknowledged = true
+                } label: {
+                    Text("ACKNOWLEDGED")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.camsTextPrimary)
+                        .tracking(2)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.plain)
+                .background(
+                    LinearGradient(
+                        colors: [Color(white: 0.14), Color(white: 0.09)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+            }
+            .background(Color.camsPanel)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.camsGarnet.opacity(0.45), lineWidth: 0.5)
+            )
+            .padding(.horizontal, 32)
+        }
+    }
+
+    private var bitrateText: String {
+        guard let mbps = viewModel.activeBitrateMbps else { return "—" }
+        return mbps >= 10 ? String(format: "%.0f", mbps) : String(format: "%.1f", mbps)
+    }
+}
+
+// MARK: - Camera Preview
 
 private struct CameraPreviewView: UIViewRepresentable {
     final class PreviewView: UIView {

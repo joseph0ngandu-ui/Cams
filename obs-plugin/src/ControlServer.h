@@ -76,6 +76,9 @@ public:
     /// Requests a quality preset change on the iOS app.
     void sendQuality(int qualityPreset);
 
+    /// Enables or disables Center Stage subject tracking on the iOS device.
+    void sendCenterStageEnabled(bool enabled);
+
     /// Sends a ping and returns the round-trip latency in milliseconds.
     /// Blocks for up to `timeoutMs` milliseconds.
     std::optional<double> ping(int timeoutMs = 500);

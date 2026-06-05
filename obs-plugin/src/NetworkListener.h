@@ -102,6 +102,8 @@ public:
     void setPacketCallback(PacketCallback cb);
     /// Register the callback invoked when packet loss is detected.
     void setLossCallback(LossCallback cb);
+    /// Wire a callback fired when the reassembler discards a timed-out frame.
+    void setReassemblerLossCallback(FrameReassembler::LossCallback cb);
 
     // -----------------------------------------------------------------------
     // Bonjour discovery

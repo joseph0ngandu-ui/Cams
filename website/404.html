@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Page not found — CAMS" />
+  <title>CAMS — 404 Not Found</title>
+  <link rel="stylesheet" href="./src/styles/main.css" />
+  <style>
+    /* Full-screen layout for 404 */
+    body { height: 100dvh; display: flex; flex-direction: column; }
+
+    /* Animated scanline for error feel */
+    @keyframes scanline-anim {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100vh); }
+    }
+    .scanline-moving {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 0;
+    }
+    .scanline-moving::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(to right, transparent, rgba(215,59,0,0.4), transparent);
+      animation: scanline-anim 6s linear infinite;
+    }
+
+    /* Signal-loss grid */
+    .signal-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(53,53,52,0.25) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(53,53,52,0.25) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* Corner reticle markers for the 404 display */
+    .corner-reticle {
+      position: absolute;
+      width: 40px; height: 40px;
+    }
+    .corner-tl { top: 32px; left: 32px; border-top: 1px solid; border-left: 1px solid; }
+    .corner-tr { top: 32px; right: 32px; border-top: 1px solid; border-right: 1px solid; }
+    .corner-bl { bottom: 80px; left: 32px; border-bottom: 1px solid; border-left: 1px solid; }
+    .corner-br { bottom: 80px; right: 32px; border-bottom: 1px solid; border-right: 1px solid; }
+  </style>
+</head>
+<body class="bg-surface-lowest text-on-surface font-body overflow-hidden relative">
+
+  <!-- Background layers -->
+  <div class="signal-grid"></div>
+  <div class="scanline-overlay opacity-20"></div>
+  <div class="scanline-moving"></div>
+
+  <!-- Radial vignette -->
+  <div class="fixed inset-0 pointer-events-none z-0" style="background: radial-gradient(ellipse 80% 80% at 50% 50%, transparent 20%, rgba(14,14,14,0.8) 100%);"></div>
+
+  <!-- Corner reticles -->
+  <div class="corner-reticle corner-tl" style="color: #444748;"></div>
+  <div class="corner-reticle corner-tr" style="color: #444748;"></div>
+  <div class="corner-reticle corner-bl" style="color: #444748;"></div>
+  <div class="corner-reticle corner-br" style="color: #444748;"></div>
+
+  <!-- Minimal nav -->
+  <nav class="relative z-10 h-12 flex items-center justify-between px-6" style="border-bottom: 0.5px solid #353534;">
+    <a href="/" class="flex items-center gap-2 text-on-surface hover:text-white transition-colors">
+      <span class="material-symbols-outlined text-[18px] text-garnet">sensors</span>
+      <span class="font-mono text-[13px] font-bold tracking-[0.14em] uppercase">CAMS</span>
+    </a>
+    <div class="flex items-center gap-1">
+      <div class="led led-error animate-error-blink" style="width:6px;height:6px;"></div>
+      <span class="font-mono text-[10px] text-error tracking-widest">SIGNAL LOST</span>
+    </div>
+    <span class="font-mono text-[11px] text-on-surface-variant opacity-60">ERR · 404</span>
+  </nav>
+
+  <!-- Main content -->
+  <main class="relative z-10 flex-1 flex flex-col items-center justify-center px-6 text-center gap-8">
+
+    <!-- Error readout — styled like a telemetry panel -->
+    <div class="panel py-3 px-6 flex items-center gap-4" style="background: rgba(14,14,14,0.8); backdrop-filter: blur(12px);">
+      <div class="data-cell">
+        <div class="data-label">STATUS</div>
+        <div class="font-mono text-garnet" style="font-size:13px;font-weight:500;">404</div>
+      </div>
+      <div class="hairline-v h-8"></div>
+      <div class="data-cell">
+        <div class="data-label">SIGNAL</div>
+        <div class="font-mono text-error animate-error-blink" style="font-size:13px;font-weight:500;">LOST</div>
+      </div>
+      <div class="hairline-v h-8"></div>
+      <div class="data-cell">
+        <div class="data-label">DROPS</div>
+        <div class="font-mono text-error" style="font-size:13px;font-weight:500;">∞</div>
+      </div>
+    </div>
+
+    <!-- Headline -->
+    <div>
+      <h1 class="font-display font-bold tracking-tight text-on-surface mb-3" style="font-size: clamp(40px, 8vw, 80px); line-height: 1.0; letter-spacing: -0.03em;">
+        No feed<br />
+        <span class="text-transparent bg-clip-text" style="background-image: linear-gradient(135deg, #d73b00 0%, #8e9192 100%);">detected.</span>
+      </h1>
+      <p class="text-body-lg text-on-surface-variant max-w-sm mx-auto leading-relaxed">
+        The page you're looking for isn't broadcasting on this channel. Check the URL or use the links below.
+      </p>
+    </div>
+
+    <!-- Reticle graphic -->
+    <div class="relative w-32 h-32 opacity-20">
+      <div class="absolute inset-0 border border-garnet rounded-full"></div>
+      <div class="absolute top-1/2 left-0 right-0 h-px bg-garnet -translate-y-px"></div>
+      <div class="absolute left-1/2 top-0 bottom-0 w-px bg-garnet -translate-x-px"></div>
+      <div class="absolute top-1/2 left-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 border border-garnet rounded-full"></div>
+      <!-- Corner brackets -->
+      <div class="absolute top-0 left-0 w-4 h-4 border-t border-l border-error opacity-60"></div>
+      <div class="absolute top-0 right-0 w-4 h-4 border-t border-r border-error opacity-60"></div>
+      <div class="absolute bottom-0 left-0 w-4 h-4 border-b border-l border-error opacity-60"></div>
+      <div class="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-error opacity-60"></div>
+    </div>
+
+    <!-- Navigation links -->
+    <div class="flex flex-wrap justify-center gap-3">
+      <a href="/" class="btn-primary">
+        <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+        Back to Home
+      </a>
+      <a href="docs.html" class="btn-ghost">
+        <span class="material-symbols-outlined text-[16px]">description</span>
+        Documentation
+      </a>
+      <a href="/#download" class="btn-ghost">
+        <span class="material-symbols-outlined text-[16px]">download</span>
+        Download
+      </a>
+    </div>
+
+    <!-- Site map for 404 recovery -->
+    <div class="panel p-5 flex flex-col gap-4 max-w-sm w-full text-left" style="background: rgba(14,14,14,0.8); backdrop-filter: blur(12px);">
+      <div class="data-label">AVAILABLE CHANNELS</div>
+      <div class="hairline"></div>
+      <div class="space-y-1">
+        <a href="/" class="flex items-center justify-between py-2 text-body-md text-on-surface-variant hover:text-on-surface transition-colors" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-on-surface-variant w-10">HOME</span>
+            <span>Landing Page</span>
+          </span>
+          <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+        </a>
+        <a href="docs.html" class="flex items-center justify-between py-2 text-body-md text-on-surface-variant hover:text-on-surface transition-colors" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-on-surface-variant w-10">DOCS</span>
+            <span>Documentation</span>
+          </span>
+          <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+        </a>
+        <a href="privacy.html" class="flex items-center justify-between py-2 text-body-md text-on-surface-variant hover:text-on-surface transition-colors" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-on-surface-variant w-10">PRIV</span>
+            <span>Privacy Policy</span>
+          </span>
+          <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+        </a>
+        <a href="terms.html" class="flex items-center justify-between py-2 text-body-md text-on-surface-variant hover:text-on-surface transition-colors">
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-on-surface-variant w-10">TOS</span>
+            <span>Terms of Service</span>
+          </span>
+          <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+        </a>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom status bar -->
+  <div class="relative z-10 h-10 flex items-center justify-between px-6" style="border-top: 0.5px solid #353534; background: rgba(14,14,14,0.9);">
+    <span class="font-mono text-[9px] text-on-surface-variant tracking-widest">CAMS · PROTOCOL v2.0</span>
+    <span class="font-mono text-[9px] text-on-surface-variant tracking-widest">UDP 8888/8889 · NOT FOUND</span>
+  </div>
+
+  <script type="module" src="./src/scripts/main.js"></script>
+</body>
+</html>

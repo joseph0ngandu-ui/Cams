@@ -29,6 +29,7 @@ let package = Package(
                 "BonjourPublisher.swift",
                 "CamsApp.swift",
                 "CaptureSession.swift",
+                "CenterStageEngine.swift",
                 "CircularBufferPool.swift",
                 "ContentView.swift",
                 "ControlChannel.swift",

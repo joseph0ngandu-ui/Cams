@@ -20,7 +20,7 @@ internal enum CamsPacketisationError: Error, Equatable {
 }
 
 internal struct CamsFramePacketizer {
-    static let defaultFragmentPayloadSize = 1200
+    static let defaultFragmentPayloadSize = 1400
 
     private(set) var nextSequenceNumber: UInt32 = 0
 
@@ -83,6 +83,9 @@ public protocol NetworkTransportDelegate: AnyObject, Sendable {
     /// Called when backpressure triggers and the caller should reduce bitrate or
     /// drop the current frame.  `queueDepth` is the current pending-send count.
     func transportNeedsBackpressure(_ transport: NetworkTransport, queueDepth: Int)
+    /// Called after each packet is handed off to the kernel. `byteCount` is the
+    /// wire size of the packet (header + payload) for rolling-window bitrate telemetry.
+    func transportDidSendBytes(_ transport: NetworkTransport, byteCount: Int)
 }
 
 // MARK: - NetworkTransport
@@ -185,6 +188,7 @@ public final class NetworkTransport: @unchecked Sendable {
 
             for packet in packets {
                 self.pendingSendCount += 1
+                let byteCount = packet.count
                 self.connection?.send(
                     content: packet,
                     completion: .contentProcessed { [weak self] error in
@@ -196,6 +200,9 @@ public final class NetworkTransport: @unchecked Sendable {
                                posixCode == POSIXErrorCode.ECANCELED {
                                 // Socket was cancelled deliberately — not an error condition.
                                 return
+                            }
+                            if error == nil {
+                                self.delegate?.transportDidSendBytes(self, byteCount: byteCount)
                             }
                         }
                     }
@@ -217,6 +224,8 @@ public final class NetworkTransport: @unchecked Sendable {
         let params = NWParameters.udp
         params.allowLocalEndpointReuse = true
         params.allowFastOpen           = true
+        // Hint to the kernel scheduler that this traffic is interactive video.
+        params.serviceClass = .interactiveVideo
 
         let conn = NWConnection(to: endpoint, using: params)
         connection = conn

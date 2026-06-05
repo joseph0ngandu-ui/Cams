@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cams turns your iPhone into a professional wireless camera source for OBS Studio. Hardware HEVC encoding, zero-config discovery, real-time telemetry." />
+  <meta property="og:title" content="CAMS — Wireless iPhone Camera for OBS" />
+  <meta property="og:description" content="Hardware-encoded HEVC streaming from iPhone to OBS over Wi-Fi. Zero cables. Zero setup." />
+  <meta name="theme-color" content="#0e0e0e" />
+  <title>CAMS — Wireless iPhone Camera for OBS Studio</title>
+  <link rel="stylesheet" href="./src/styles/main.css" />
+</head>
+<body class="bg-surface-lowest text-on-surface font-body overflow-x-hidden">
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     NAV
+════════════════════════════════════════════════════════════════════ -->
+<nav class="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-6 border-b border-[#353534] bg-surface-lowest/95 backdrop-blur-md" style="border-bottom: 0.5px solid #353534;">
+  <!-- Wordmark -->
+  <a href="/" class="flex items-center gap-2 text-on-surface hover:text-white transition-colors">
+    <span class="material-symbols-outlined text-[18px] text-emerald">sensors</span>
+    <span class="font-mono text-[13px] font-bold tracking-[0.14em] uppercase">CAMS</span>
+  </a>
+
+  <!-- Desktop nav -->
+  <div class="hidden md:flex items-center gap-6">
+    <a href="#features"  class="nav-link">Features</a>
+    <a href="#protocol"  class="nav-link">Protocol</a>
+    <a href="#obs"       class="nav-link">OBS</a>
+    <a href="docs.html"  class="nav-link">Docs</a>
+    <a href="https://github.com/joseph0ngandu-ui" class="nav-link" target="_blank" rel="noopener">
+      <span class="flex items-center gap-1">GitHub <span class="material-symbols-outlined text-[14px]">open_in_new</span></span>
+    </a>
+  </div>
+
+  <!-- CTA -->
+  <div class="hidden md:flex items-center gap-3">
+    <a href="#download" class="btn-primary text-[10px]">
+      <span class="material-symbols-outlined text-[14px]">download</span>
+      Download
+    </a>
+  </div>
+
+  <!-- Mobile toggle -->
+  <button id="nav-toggle" aria-label="Toggle menu" aria-expanded="false" class="md:hidden p-1 text-on-surface-variant hover:text-on-surface">
+    <span class="material-symbols-outlined text-[22px]">menu</span>
+  </button>
+</nav>
+
+<!-- Mobile menu -->
+<div id="nav-mobile" class="hidden fixed top-12 left-0 right-0 z-40 border-b border-[#353534] bg-surface-lowest/98 backdrop-blur-md p-4 flex flex-col gap-3 md:hidden">
+  <a href="#features" class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">Features</a>
+  <a href="#protocol" class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">Protocol</a>
+  <a href="#obs"      class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">OBS Integration</a>
+  <a href="docs.html" class="nav-link text-[12px] py-2 border-b border-[#1c1b1b]">Documentation</a>
+  <a href="#download" class="btn-primary w-full justify-center mt-2">Download</a>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     HERO
+════════════════════════════════════════════════════════════════════ -->
+<section class="relative min-h-screen flex items-center pt-12 overflow-hidden">
+  <!-- Background grid -->
+  <div class="absolute inset-0 pointer-events-none" style="background-image: linear-gradient(to right, rgba(53,53,52,0.3) 1px, transparent 1px), linear-gradient(to bottom, rgba(53,53,52,0.3) 1px, transparent 1px); background-size: 48px 48px;"></div>
+  <!-- Radial vignette -->
+  <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 60% 70% at 50% 50%, transparent 30%, #0e0e0e 100%);"></div>
+  <!-- Scanline -->
+  <div class="scanline-overlay opacity-30"></div>
+
+  <div class="relative z-10 w-full max-w-7xl mx-auto px-6 lg:px-12 py-24 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+
+    <!-- Left — Copy -->
+    <div class="flex flex-col gap-6">
+      <span class="section-label animate-slide-up" style="animation-delay: 0ms;">
+        Wireless Camera Protocol v2.0
+      </span>
+
+      <h1 class="font-display font-bold text-[clamp(40px,6vw,72px)] leading-[1.02] tracking-[-0.03em] text-on-surface animate-slide-up" style="animation-delay: 60ms;">
+        Your iPhone.<br />
+        <span class="text-transparent bg-clip-text" style="background-image: linear-gradient(135deg, #ffffff 0%, #8e9192 100%);">Professional broadcast.</span>
+      </h1>
+
+      <p class="text-body-lg text-on-surface-variant max-w-lg animate-slide-up leading-relaxed" style="animation-delay: 120ms;">
+        Cams streams hardware-encoded HEVC directly from your iPhone to OBS Studio over Wi-Fi. Zero cables. Zero configuration. Sub-frame latency with a custom 21-byte UDP protocol.
+      </p>
+
+      <!-- CTAs -->
+      <div class="flex flex-wrap gap-3 animate-slide-up" style="animation-delay: 180ms;">
+        <a href="#download" class="btn-primary">
+          <span class="material-symbols-outlined text-[16px]">apple</span>
+          iOS App
+        </a>
+        <a href="#download" class="btn-ghost">
+          <span class="material-symbols-outlined text-[16px]">extension</span>
+          OBS Plugin
+        </a>
+        <a href="docs.html" class="btn-ghost">
+          <span class="material-symbols-outlined text-[16px]">description</span>
+          Documentation
+        </a>
+      </div>
+
+      <!-- Stats strip -->
+      <div class="flex flex-wrap gap-0 mt-2 animate-slide-up" style="animation-delay: 240ms;">
+        <div class="pr-4 mr-4" style="border-right: 0.5px solid #353534;">
+          <div class="data-label mb-1">Header Size</div>
+          <div class="font-mono text-[20px] font-bold text-on-surface">21 <span class="text-[12px] font-normal text-on-surface-variant">bytes</span></div>
+        </div>
+        <div class="pr-4 mr-4" style="border-right: 0.5px solid #353534;">
+          <div class="data-label mb-1">Fragment MTU</div>
+          <div class="font-mono text-[20px] font-bold text-on-surface">1400 <span class="text-[12px] font-normal text-on-surface-variant">bytes</span></div>
+        </div>
+        <div class="pr-4 mr-4" style="border-right: 0.5px solid #353534;">
+          <div class="data-label mb-1">Video Port</div>
+          <div class="font-mono text-[20px] font-bold text-on-surface">8888 <span class="text-[12px] font-normal text-on-surface-variant">UDP</span></div>
+        </div>
+        <div>
+          <div class="data-label mb-1">Control Port</div>
+          <div class="font-mono text-[20px] font-bold text-on-surface">8889 <span class="text-[12px] font-normal text-on-surface-variant">UDP</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right — App mockup -->
+    <div class="flex justify-center lg:justify-end animate-fade-in" style="animation-delay: 100ms;">
+      <div class="relative" style="width: 280px;">
+        <!-- Phone frame -->
+        <div class="relative rounded-[36px] overflow-hidden" style="background: #0a0a0a; border: 1px solid #333333; box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 32px 80px rgba(0,0,0,0.8), 0 0 40px rgba(0,230,57,0.06); width: 280px; aspect-ratio: 9/19.5;">
+
+          <!-- Dynamic island -->
+          <div class="absolute top-[10px] left-1/2 -translate-x-1/2 w-[90px] h-[28px] rounded-full bg-black z-20 flex items-center justify-center gap-1.5">
+            <div class="w-[8px] h-[8px] rounded-full" style="background: #1a1a1a;"></div>
+            <div class="w-[4px] h-[4px] rounded-full bg-on-surface-variant opacity-40"></div>
+          </div>
+
+          <!-- App states (layered, animated) -->
+
+          <!-- STATE 1: IDLE -->
+          <div class="absolute inset-0 z-10 flex flex-col" style="animation: state-idle 9s ease-in-out infinite;">
+            <!-- Viewfinder bg -->
+            <div class="absolute inset-0" style="background: linear-gradient(160deg, #0c1410 0%, #080808 50%, #0e0c0a 100%);"></div>
+            <!-- Crosshair -->
+            <div class="absolute inset-0 pointer-events-none opacity-20" style="background-image: linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px); background-size: 70px 70px; background-position: center center;"></div>
+            <!-- UI overlay -->
+            <div class="absolute inset-0 flex flex-col justify-between p-3 pt-[52px]">
+              <!-- Top bar -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono text-[9px] font-bold tracking-widest text-on-surface opacity-80">CAMS</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <div class="led led-gray" style="width:5px;height:5px;"></div>
+                  <span class="font-mono text-[8px] text-on-surface-variant">READY</span>
+                </div>
+                <span class="font-mono text-[8px] text-on-surface-variant opacity-60">192.168.1.42</span>
+              </div>
+              <!-- Reticle center -->
+              <div class="flex justify-center items-center flex-1">
+                <div class="reticle" style="width:60px;height:60px;">
+                  <div class="reticle-corner reticle-corner-tl border-[rgba(255,255,255,0.25)]"></div>
+                  <div class="reticle-corner reticle-corner-tr border-[rgba(255,255,255,0.25)]"></div>
+                  <div class="reticle-corner reticle-corner-bl border-[rgba(255,255,255,0.25)]"></div>
+                  <div class="reticle-corner reticle-corner-br border-[rgba(255,255,255,0.25)]"></div>
+                </div>
+              </div>
+              <!-- Bottom panel -->
+              <div class="flex flex-col gap-2">
+                <!-- Quality selector -->
+                <div class="panel flex items-center p-2 gap-2">
+                  <span class="font-mono text-[7px] font-bold tracking-widest text-on-surface-variant uppercase">RES</span>
+                  <div class="flex-1 flex gap-1">
+                    <div class="flex-1 h-5 flex items-center justify-center" style="background: #353534; border: 0.5px solid #444748;">
+                      <span class="font-mono text-[7px] text-on-surface-variant">720p</span>
+                    </div>
+                    <div class="flex-1 h-5 flex items-center justify-center bg-surface-high" style="border: 0.5px solid #00e639;">
+                      <span class="font-mono text-[7px] text-emerald">1080p</span>
+                    </div>
+                    <div class="flex-1 h-5 flex items-center justify-center" style="background: #353534; border: 0.5px solid #444748;">
+                      <span class="font-mono text-[7px] text-on-surface-variant">4K</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Toggles -->
+                <div class="grid grid-cols-3 gap-1.5">
+                  <div class="btn-tactile h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-gray" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-on-surface-variant uppercase text-center leading-[1.1]">FOCUS<br/>LOCK</span>
+                  </div>
+                  <div class="btn-tactile h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-gray" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-on-surface-variant uppercase text-center leading-[1.1]">EXP<br/>LOCK</span>
+                  </div>
+                  <div class="btn-tactile h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-gray" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-on-surface-variant uppercase text-center leading-[1.1]">TRK<br/>OFF</span>
+                  </div>
+                </div>
+                <!-- Start button -->
+                <button class="btn-tactile w-full h-10 flex items-center justify-center gap-2" style="border-color: #c4c7c8;">
+                  <span class="font-mono text-[8px] font-bold tracking-[0.1em] uppercase text-on-surface">START STREAMING</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- STATE 2: STREAMING (unlinked) -->
+          <div class="absolute inset-0 z-10 flex flex-col" style="animation: state-streaming 9s ease-in-out infinite; opacity: 0;">
+            <div class="absolute inset-0" style="background: linear-gradient(160deg, #0c1008 0%, #080808 50%, #0a0a0a 100%);"></div>
+            <!-- Subtle streaming edge -->
+            <div class="absolute inset-0 pointer-events-none" style="box-shadow: inset 0 0 0 1px rgba(215, 59, 0, 0.3);"></div>
+            <div class="absolute inset-0 flex flex-col justify-between p-3 pt-[52px]">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-[9px] font-bold tracking-widest text-on-surface opacity-80">CAMS</span>
+                <div class="flex items-center gap-1">
+                  <div class="led led-amber animate-amber-pulse" style="width:5px;height:5px;"></div>
+                  <span class="font-mono text-[8px] text-amber">BROADCASTING</span>
+                </div>
+                <span class="font-mono text-[8px] text-on-surface-variant opacity-60">192.168.1.42</span>
+              </div>
+              <div class="flex justify-center items-center flex-1">
+                <div class="reticle" style="width:60px;height:60px;">
+                  <div class="reticle-corner reticle-corner-tl border-[rgba(215,59,0,0.5)]"></div>
+                  <div class="reticle-corner reticle-corner-tr border-[rgba(215,59,0,0.5)]"></div>
+                  <div class="reticle-corner reticle-corner-bl border-[rgba(215,59,0,0.5)]"></div>
+                  <div class="reticle-corner reticle-corner-br border-[rgba(215,59,0,0.5)]"></div>
+                </div>
+              </div>
+              <div class="flex flex-col gap-2">
+                <div class="panel p-2 flex items-center gap-2 opacity-50" style="pointer-events:none;">
+                  <span class="font-mono text-[7px] font-bold tracking-widest text-on-surface-variant uppercase">RES</span>
+                  <span class="font-mono text-[7px] text-on-surface-variant">1080p</span>
+                  <span class="material-symbols-outlined text-[10px] text-on-surface-variant ml-auto">lock</span>
+                </div>
+                <div class="grid grid-cols-3 gap-1.5">
+                  <div class="btn-tactile h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-gray" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-on-surface-variant uppercase text-center leading-[1.1]">FOCUS<br/>LOCK</span>
+                  </div>
+                  <div class="h-10 flex flex-col items-center justify-center gap-0.5 toggle-active-emerald">
+                    <div class="led led-emerald animate-led-pulse" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-emerald uppercase text-center leading-[1.1]">TRK<br/>ON</span>
+                  </div>
+                  <div class="btn-tactile h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-gray" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-on-surface-variant uppercase text-center leading-[1.1]">EXP<br/>LOCK</span>
+                  </div>
+                </div>
+                <button class="w-full h-10 flex items-center justify-center gap-2" style="background:#1a0000; border: 0.5px solid #d73b00; box-shadow: 0 0 10px rgba(215,59,0,0.2);">
+                  <span class="font-mono text-[8px] font-bold tracking-[0.1em] uppercase text-garnet">■ STOP</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- STATE 3: OBS LINKED -->
+          <div class="absolute inset-0 z-10 flex flex-col" style="animation: state-linked 9s ease-in-out infinite; opacity: 0;">
+            <div class="absolute inset-0" style="background: linear-gradient(160deg, #081008 0%, #080808 50%, #0a0a0a 100%);"></div>
+            <!-- Green edge glow — OBS linked -->
+            <div class="absolute inset-0 pointer-events-none animate-data-wave" style="box-shadow: inset 0 0 0 1px rgba(0,230,57,0.35), inset 0 0 30px rgba(0,230,57,0.06);"></div>
+            <!-- Telemetry HUD -->
+            <div class="absolute top-[56px] left-2 right-2 flex gap-1.5 z-20">
+              <div class="flex-1 recessed p-1.5" style="border: 0.5px solid #333;">
+                <div class="data-label" style="font-size:7px;">BITRATE</div>
+                <div class="font-mono text-emerald" style="font-size:11px;font-weight:500;">7.4 <span style="font-size:7px;color:#8e9192;">Mbps</span></div>
+              </div>
+              <div class="flex-1 recessed p-1.5" style="border: 0.5px solid #333;">
+                <div class="data-label" style="font-size:7px;">DROPS</div>
+                <div class="font-mono text-on-surface" style="font-size:11px;font-weight:500;">0</div>
+              </div>
+              <div class="flex-1 recessed p-1.5" style="border: 0.5px solid #333;">
+                <div class="data-label" style="font-size:7px;">THERMAL</div>
+                <div class="font-mono text-emerald" style="font-size:9px;font-weight:500;">NOMINAL</div>
+              </div>
+            </div>
+            <div class="absolute inset-0 flex flex-col justify-between p-3 pt-[52px]">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-[9px] font-bold tracking-widest text-on-surface opacity-80">CAMS</span>
+                <div class="flex items-center gap-1">
+                  <div class="led led-emerald animate-led-pulse" style="width:5px;height:5px;"></div>
+                  <span class="font-mono text-[8px] text-emerald">OBS LINKED</span>
+                </div>
+                <span class="font-mono text-[8px] text-on-surface-variant opacity-60">192.168.1.42</span>
+              </div>
+              <div class="flex justify-center items-center flex-1 mt-10">
+                <div class="reticle" style="width:64px;height:64px;">
+                  <div class="reticle-corner reticle-corner-tl border-[rgba(0,230,57,0.7)]"></div>
+                  <div class="reticle-corner reticle-corner-tr border-[rgba(0,230,57,0.7)]"></div>
+                  <div class="reticle-corner reticle-corner-bl border-[rgba(0,230,57,0.7)]"></div>
+                  <div class="reticle-corner reticle-corner-br border-[rgba(0,230,57,0.7)]"></div>
+                  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-emerald animate-led-pulse"></div>
+                </div>
+              </div>
+              <div class="flex flex-col gap-2">
+                <div class="panel p-2 flex items-center gap-2 opacity-50">
+                  <span class="font-mono text-[7px] font-bold tracking-widest text-on-surface-variant uppercase">RES</span>
+                  <span class="font-mono text-[7px] text-on-surface-variant">1080p · 30fps</span>
+                  <span class="material-symbols-outlined text-[10px] text-on-surface-variant ml-auto">lock</span>
+                </div>
+                <div class="grid grid-cols-3 gap-1.5">
+                  <div class="toggle-active-amber h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-amber animate-amber-pulse" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-amber uppercase text-center leading-[1.1]">FOCUS<br/>LOCK</span>
+                  </div>
+                  <div class="toggle-active-emerald h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-emerald animate-led-pulse" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-emerald uppercase text-center leading-[1.1]">TRK<br/>ON</span>
+                  </div>
+                  <div class="btn-tactile h-10 flex flex-col items-center justify-center gap-0.5">
+                    <div class="led led-gray" style="width:4px;height:4px;"></div>
+                    <span class="font-mono text-[6.5px] font-bold tracking-wide text-on-surface-variant uppercase text-center leading-[1.1]">EXP<br/>FREE</span>
+                  </div>
+                </div>
+                <button class="w-full h-10 flex items-center justify-center gap-2" style="background:#1a0000; border: 0.5px solid #d73b00; box-shadow: 0 0 10px rgba(215,59,0,0.15);">
+                  <span class="font-mono text-[8px] font-bold tracking-[0.1em] uppercase text-garnet">■ STOP</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- State label below phone -->
+        <div class="mt-4 flex justify-center">
+          <div class="panel px-3 py-1.5 flex items-center gap-2">
+            <div class="led" style="width:5px;height:5px;background:#353534;border-radius:50%;animation:state-idle 9s ease-in-out infinite;"></div>
+            <span class="font-mono text-[9px] text-on-surface-variant" style="animation:state-idle 9s ease-in-out infinite;">IDLE</span>
+            <div class="led led-amber animate-amber-pulse" style="width:5px;height:5px;animation:state-streaming 9s ease-in-out infinite, amber-pulse 2s ease-in-out infinite; opacity:0;"></div>
+            <span class="font-mono text-[9px] text-amber" style="animation:state-streaming 9s ease-in-out infinite;opacity:0;">STREAMING</span>
+            <div class="led led-emerald" style="width:5px;height:5px;animation:state-linked 9s ease-in-out infinite, led-pulse 2s ease-in-out infinite;opacity:0;"></div>
+            <span class="font-mono text-[9px] text-emerald" style="animation:state-linked 9s ease-in-out infinite;opacity:0;">OBS LINKED</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom scroll hint -->
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-40 animate-fade-in" style="animation-delay: 1s;">
+    <span class="font-mono text-[9px] text-on-surface-variant tracking-widest uppercase">Scroll</span>
+    <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_arrow_down</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     FEATURES
+════════════════════════════════════════════════════════════════════ -->
+<section id="features" class="py-24 lg:py-32 px-6 lg:px-12 max-w-7xl mx-auto">
+  <span class="section-label mb-4" data-animate>System Features</span>
+  <h2 class="font-display text-display-md font-bold tracking-tight text-on-surface mb-16 max-w-2xl" data-animate>
+    Everything a professional needs.<br />Nothing they don't.
+  </h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px" style="border: 0.5px solid #353534;">
+
+    <!-- Feature 1 -->
+    <div class="panel p-6 flex flex-col gap-3 hover:bg-surface-low transition-colors" data-animate>
+      <div class="flex items-center justify-between">
+        <span class="material-symbols-outlined text-emerald text-[28px]">sensors</span>
+        <span class="font-mono text-[9px] text-on-surface-variant tracking-widest border border-[#353534] px-1.5 py-0.5">UDP · BONJOUR</span>
+      </div>
+      <h3 class="font-display text-headline-md font-semibold text-on-surface">Zero-Config Discovery</h3>
+      <p class="text-body-md text-on-surface-variant leading-relaxed">
+        Bonjour publishes <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">_cams-video._udp</code> automatically. OBS finds your device in seconds — no IP addresses to type, no ports to configure.
+      </p>
+    </div>
+
+    <!-- Feature 2 -->
+    <div class="panel p-6 flex flex-col gap-3 hover:bg-surface-low transition-colors" data-animate>
+      <div class="flex items-center justify-between">
+        <span class="material-symbols-outlined text-amber text-[28px]">memory</span>
+        <span class="font-mono text-[9px] text-on-surface-variant tracking-widest border border-[#353534] px-1.5 py-0.5">HEVC · H.264</span>
+      </div>
+      <h3 class="font-display text-headline-md font-semibold text-on-surface">Hardware Encoding</h3>
+      <p class="text-body-md text-on-surface-variant leading-relaxed">
+        VideoToolbox drives the Apple Neural Engine for hardware HEVC (primary) with H.264 fallback. 2-second GOP, CABAC entropy, CBR at up to 50 Mbps for 4K 60fps.
+      </p>
+    </div>
+
+    <!-- Feature 3 -->
+    <div class="panel p-6 flex flex-col gap-3 hover:bg-surface-low transition-colors" data-animate>
+      <div class="flex items-center justify-between">
+        <span class="material-symbols-outlined text-emerald text-[28px]">person_search</span>
+        <span class="font-mono text-[9px] text-on-surface-variant tracking-widest border border-[#353534] px-1.5 py-0.5">HARDWARE · VISION</span>
+      </div>
+      <h3 class="font-display text-headline-md font-semibold text-on-surface">Subject Tracking</h3>
+      <p class="text-body-md text-on-surface-variant leading-relaxed">
+        Hardware Center Stage on supported iPads. Software fallback via <code class="font-mono text-[12px] text-emerald bg-surface-container px-1 rounded-sm">VNDetectHumanRectanglesRequest</code> with α=0.15 exponential smoothing for all other devices.
+      </p>
+    </div>
+
+    <!-- Feature 4 -->
+    <div class="panel p-6 flex flex-col gap-3 hover:bg-surface-low transition-colors" data-animate>
+      <div class="flex items-center justify-between">
+        <span class="material-symbols-outlined text-amber text-[28px]">analytics</span>
+        <span class="font-mono text-[9px] text-on-surface-variant tracking-widest border border-[#353534] px-1.5 py-0.5">1s WINDOW</span>
+      </div>
+      <h3 class="font-display text-headline-md font-semibold text-on-surface">Live Telemetry HUD</h3>
+      <p class="text-body-md text-on-surface-variant leading-relaxed">
+        Real-time outgoing bitrate, packet drops per second, and thermal state — all updated on a 1-second rolling window. Thermal throttle reduces bitrate automatically: 50% at Serious, 75% at Critical.
+      </p>
+    </div>
+
+    <!-- Feature 5 -->
+    <div class="panel p-6 flex flex-col gap-3 hover:bg-surface-low transition-colors" data-animate>
+      <div class="flex items-center justify-between">
+        <span class="material-symbols-outlined text-garnet text-[28px]">settings_remote</span>
+        <span class="font-mono text-[9px] text-on-surface-variant tracking-widest border border-[#353534] px-1.5 py-0.5">UDP 8889</span>
+      </div>
+      <h3 class="font-display text-headline-md font-semibold text-on-surface">Bi-directional Control</h3>
+      <p class="text-body-md text-on-surface-variant leading-relaxed">
+        OBS can remotely set focus lock, exposure lock, quality preset, subject tracking, and request keyframes. The iOS app surface updates in real time with a distinct visual state for OBS-originated commands.
+      </p>
+    </div>
+
+    <!-- Feature 6 -->
+    <div class="panel p-6 flex flex-col gap-3 hover:bg-surface-low transition-colors" data-animate>
+      <div class="flex items-center justify-between">
+        <span class="material-symbols-outlined text-emerald text-[28px]">stacked_bar_chart</span>
+        <span class="font-mono text-[9px] text-on-surface-variant tracking-widest border border-[#353534] px-1.5 py-0.5">JITTER · DECODE</span>
+      </div>
+      <h3 class="font-display text-headline-md font-semibold text-on-surface">OBS Reassembly Pipeline</h3>
+      <p class="text-body-md text-on-surface-variant leading-relaxed">
+        The OBS plugin reassembles fragmented UDP frames, reorders via a jitter buffer, and hardware-decodes with FFmpeg. Loss events trigger automatic keyframe requests within 1000ms.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     HOW IT WORKS
+════════════════════════════════════════════════════════════════════ -->
+<section id="how-it-works" class="py-24 lg:py-32 border-t border-[#353534]" style="border-top: 0.5px solid #353534; background-color: #0a0a0a;">
+  <div class="px-6 lg:px-12 max-w-7xl mx-auto">
+    <span class="section-label mb-4" data-animate>Setup</span>
+    <h2 class="font-display text-display-md font-bold tracking-tight text-on-surface mb-16" data-animate>Three steps to live.</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-px" style="border: 0.5px solid #353534;">
+      <!-- Step 1 -->
+      <div class="bg-surface-container p-8 flex flex-col gap-4" data-animate>
+        <div class="font-mono text-[48px] font-bold tracking-tight text-on-surface opacity-15 leading-none">01</div>
+        <div class="hairline"></div>
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-emerald text-[24px] mt-0.5">download</span>
+          <div>
+            <h3 class="font-display text-headline-md font-semibold text-on-surface mb-2">Install</h3>
+            <p class="text-body-md text-on-surface-variant">
+              Download the Cams app from the App Store on your iPhone or iPad. Install the OBS plugin from the releases page or build from source.
+            </p>
+          </div>
+        </div>
+      </div>
+      <!-- Step 2 -->
+      <div class="bg-surface-container p-8 flex flex-col gap-4" data-animate>
+        <div class="font-mono text-[48px] font-bold tracking-tight text-on-surface opacity-15 leading-none">02</div>
+        <div class="hairline"></div>
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-amber text-[24px] mt-0.5">videocam</span>
+          <div>
+            <h3 class="font-display text-headline-md font-semibold text-on-surface mb-2">Go Live</h3>
+            <p class="text-body-md text-on-surface-variant">
+              Open Cams, choose a quality preset, and tap <strong class="text-on-surface font-semibold">Start Streaming</strong>. The app publishes itself to your local network via Bonjour immediately.
+            </p>
+          </div>
+        </div>
+      </div>
+      <!-- Step 3 -->
+      <div class="bg-surface-container p-8 flex flex-col gap-4" data-animate>
+        <div class="font-mono text-[48px] font-bold tracking-tight text-on-surface opacity-15 leading-none">03</div>
+        <div class="hairline"></div>
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-emerald text-[24px] mt-0.5">link</span>
+          <div>
+            <h3 class="font-display text-headline-md font-semibold text-on-surface mb-2">OBS Links</h3>
+            <p class="text-body-md text-on-surface-variant">
+              Add a <em class="text-on-surface">Cams</em> source in OBS. The plugin discovers your device automatically and connects. The status pill turns emerald — you're live.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PROTOCOL DEEP-DIVE
+════════════════════════════════════════════════════════════════════ -->
+<section id="protocol" class="py-24 lg:py-32 px-6 lg:px-12 max-w-7xl mx-auto">
+  <span class="section-label mb-4" data-animate>Wire Format</span>
+  <h2 class="font-display text-display-md font-bold tracking-tight text-on-surface mb-4" data-animate>
+    The 21-byte header.
+  </h2>
+  <p class="text-body-lg text-on-surface-variant max-w-2xl mb-12" data-animate>
+    Every UDP packet begins with a fixed 21-byte big-endian header, followed by raw NAL payload bytes. All fragments for one encoded frame share the same sequence number.
+  </p>
+
+  <!-- Header visualizer -->
+  <div class="overflow-x-auto mb-10" data-animate>
+    <div class="min-w-[680px]">
+      <!-- Byte ruler -->
+      <div class="flex mb-1">
+        <div class="font-mono text-[9px] text-on-surface-variant" style="width:12px;"></div>
+        <div class="flex flex-1 gap-px">
+          <div class="font-mono text-[9px] text-on-surface-variant text-center" style="width:calc(4/21*100%)">bytes 0-3</div>
+          <div class="font-mono text-[9px] text-on-surface-variant text-center" style="width:calc(8/21*100%)">bytes 4-11</div>
+          <div class="font-mono text-[9px] text-on-surface-variant text-center" style="width:calc(1/21*100%)">12</div>
+          <div class="font-mono text-[9px] text-on-surface-variant text-center" style="width:calc(2/21*100%)">13-14</div>
+          <div class="font-mono text-[9px] text-on-surface-variant text-center" style="width:calc(2/21*100%)">15-16</div>
+          <div class="font-mono text-[9px] text-on-surface-variant text-center" style="width:calc(4/21*100%)">17-20</div>
+        </div>
+      </div>
+      <!-- Header blocks -->
+      <div class="flex h-14 gap-px border border-[#353534]">
+        <div class="flex items-center justify-center text-center" style="width:calc(4/21*100%); background:#1c1b1b; border-right:0.5px solid #353534;">
+          <div>
+            <div class="font-mono text-[9px] text-amber font-bold tracking-widest uppercase">Sequence</div>
+            <div class="font-mono text-[9px] text-on-surface-variant">UInt32</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center text-center" style="width:calc(8/21*100%); background:#201f1f; border-right:0.5px solid #353534;">
+          <div>
+            <div class="font-mono text-[9px] text-emerald font-bold tracking-widest uppercase">Timestamp</div>
+            <div class="font-mono text-[9px] text-on-surface-variant">UInt64 ns</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center text-center" style="width:calc(1/21*100%); background:#1c1b1b; border-right:0.5px solid #353534;">
+          <div class="font-mono text-[8px] text-garnet font-bold uppercase rotate-90 whitespace-nowrap" style="transform:rotate(-90deg);">Type</div>
+        </div>
+        <div class="flex items-center justify-center text-center" style="width:calc(2/21*100%); background:#201f1f; border-right:0.5px solid #353534;">
+          <div>
+            <div class="font-mono text-[8px] text-on-surface-variant font-bold uppercase">Frag</div>
+            <div class="font-mono text-[8px] text-on-surface-variant">Idx</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center text-center" style="width:calc(2/21*100%); background:#1c1b1b; border-right:0.5px solid #353534;">
+          <div>
+            <div class="font-mono text-[8px] text-on-surface-variant font-bold uppercase">Frag</div>
+            <div class="font-mono text-[8px] text-on-surface-variant">Cnt</div>
+          </div>
+        </div>
+        <div class="flex-1 flex items-center justify-center text-center" style="background:#201f1f;">
+          <div>
+            <div class="font-mono text-[9px] text-amber font-bold tracking-widest uppercase">Payload Len</div>
+            <div class="font-mono text-[9px] text-on-surface-variant">UInt32</div>
+          </div>
+        </div>
+      </div>
+      <!-- NAL payload -->
+      <div class="h-8 mt-px flex items-center justify-center" style="background: #0e0e0e; border: 0.5px solid #353534; border-top: none;">
+        <div class="font-mono text-[10px] text-on-surface-variant tracking-widest uppercase">↓ NAL Payload bytes (variable length) ↓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Protocol code + frame types -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-px" style="border: 0.5px solid #353534;" data-animate>
+    <!-- Frame types -->
+    <div class="panel p-6">
+      <div class="data-label mb-4">Frame Types (byte 12)</div>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[9px] text-on-surface-variant w-8">0x00</span>
+            <span class="font-mono text-mono-md text-on-surface">h264</span>
+          </div>
+          <span class="font-mono text-[9px] text-on-surface-variant">H.264 inter frame</span>
+        </div>
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[9px] text-on-surface-variant w-8">0x01</span>
+            <span class="font-mono text-mono-md text-on-surface">hevc</span>
+          </div>
+          <span class="font-mono text-[9px] text-on-surface-variant">HEVC inter frame</span>
+        </div>
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[9px] text-on-surface-variant w-8">0x02</span>
+            <span class="font-mono text-mono-md text-on-surface">parameterSets</span>
+          </div>
+          <span class="font-mono text-[9px] text-on-surface-variant">SPS/PPS/VPS</span>
+        </div>
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[9px] text-on-surface-variant w-8">0x03</span>
+            <span class="font-mono text-mono-md text-emerald">keyframe</span>
+          </div>
+          <span class="font-mono text-[9px] text-on-surface-variant">IDR / intra frame</span>
+        </div>
+        <div class="flex items-center justify-between py-2">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[9px] text-on-surface-variant w-8">0x04</span>
+            <span class="font-mono text-mono-md text-garnet">eos</span>
+          </div>
+          <span class="font-mono text-[9px] text-on-surface-variant">End of stream</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Control commands -->
+    <div class="panel p-6">
+      <div class="data-label mb-4">Control Commands (port 8889)</div>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="font-mono text-[9px] text-amber w-8">0x01</span>
+          <span class="font-mono text-mono-md text-on-surface flex-1 ml-2">lockFocus</span>
+          <span class="font-mono text-[9px] text-on-surface-variant">→ iOS</span>
+        </div>
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="font-mono text-[9px] text-amber w-8">0x02</span>
+          <span class="font-mono text-mono-md text-on-surface flex-1 ml-2">unlockFocus</span>
+          <span class="font-mono text-[9px] text-on-surface-variant">→ iOS</span>
+        </div>
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="font-mono text-[9px] text-amber w-8">0x05</span>
+          <span class="font-mono text-mono-md text-on-surface flex-1 ml-2">requestKeyframe</span>
+          <span class="font-mono text-[9px] text-on-surface-variant">→ iOS</span>
+        </div>
+        <div class="flex items-center justify-between py-2" style="border-bottom: 0.5px solid #1c1b1b;">
+          <span class="font-mono text-[9px] text-amber w-8">0x06</span>
+          <span class="font-mono text-mono-md text-on-surface flex-1 ml-2">setQualityLow / Med / High</span>
+          <span class="font-mono text-[9px] text-on-surface-variant">→ iOS</span>
+        </div>
+        <div class="flex items-center justify-between py-2">
+          <span class="font-mono text-[9px] text-emerald w-8">0x0A</span>
+          <span class="font-mono text-mono-md text-emerald flex-1 ml-2">setCenterStageEnabled</span>
+          <span class="font-mono text-[9px] text-on-surface-variant">bi-dir</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 flex justify-end" data-animate>
+    <a href="docs.html#protocol" class="btn-ghost text-[10px]">
+      Full protocol reference
+      <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+    </a>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     OBS INTEGRATION
+════════════════════════════════════════════════════════════════════ -->
+<section id="obs" class="py-24 lg:py-32" style="background-color: #0a0a0a; border-top: 0.5px solid #353534; border-bottom: 0.5px solid #353534;">
+  <div class="px-6 lg:px-12 max-w-7xl mx-auto">
+    <span class="section-label mb-4" data-animate>OBS Studio Integration</span>
+    <h2 class="font-display text-display-md font-bold tracking-tight text-on-surface mb-4" data-animate>
+      Native plugin. First-class source.
+    </h2>
+    <p class="text-body-lg text-on-surface-variant max-w-2xl mb-16" data-animate>
+      The Cams OBS plugin is a native <code class="font-mono text-[14px] text-emerald bg-surface-container px-1.5 rounded-sm">obs_source_t</code>. It handles Bonjour browsing, UDP reassembly, jitter buffering, hardware decode, and bi-directional control entirely within OBS.
+    </p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-px" style="border: 0.5px solid #353534;">
+      <!-- OBS panel mockup -->
+      <div class="panel p-6 flex flex-col gap-4" data-animate>
+        <div class="data-label">OBS Properties Panel</div>
+        <!-- Mockup of OBS source panel -->
+        <div class="recessed p-4 flex flex-col gap-4" style="border: 0.5px solid #353534;">
+          <!-- Device selector -->
+          <div class="flex flex-col gap-1.5">
+            <label class="data-label">Device</label>
+            <div class="flex items-center gap-2 p-2" style="background:#131313; border: 0.5px solid #353534;">
+              <div class="led led-emerald animate-led-pulse"></div>
+              <span class="font-mono text-mono-md text-on-surface">iPhone 16 Pro · 192.168.1.42</span>
+              <span class="material-symbols-outlined text-on-surface-variant text-[16px] ml-auto">arrow_drop_down</span>
+            </div>
+          </div>
+          <!-- Stats -->
+          <div class="grid grid-cols-3 gap-2">
+            <div class="flex flex-col gap-1 p-2" style="background:#131313; border: 0.5px solid #353534;">
+              <span class="data-label">REASSEMBLED</span>
+              <span class="font-mono text-mono-md text-emerald">48,231</span>
+            </div>
+            <div class="flex flex-col gap-1 p-2" style="background:#131313; border: 0.5px solid #353534;">
+              <span class="data-label">DROPPED</span>
+              <span class="font-mono text-mono-md text-on-surface">0</span>
+            </div>
+            <div class="flex flex-col gap-1 p-2" style="background:#131313; border: 0.5px solid #353534;">
+              <span class="data-label">LOSS RATIO</span>
+              <span class="font-mono text-mono-md text-emerald">0.00%</span>
+            </div>
+          </div>
+          <!-- Center Stage toggle -->
+          <div class="flex items-center justify-between p-2" style="background:#131313; border: 0.5px solid #353534;">
+            <span class="data-label">CENTER STAGE</span>
+            <div class="flex items-center gap-2">
+              <div class="led led-emerald animate-led-pulse"></div>
+              <span class="font-mono text-[10px] text-emerald">ENABLED</span>
+            </div>
+          </div>
+          <!-- Keyframe button -->
+          <button class="btn-tactile w-full py-2 text-center">
+            <span class="font-mono text-[10px] font-bold tracking-widest text-on-surface-variant uppercase">Request Keyframe</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Pipeline description -->
+      <div class="panel p-6 flex flex-col gap-6" data-animate>
+        <div class="data-label">Receive Pipeline</div>
+        <div class="flex flex-col gap-4">
+          <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+              <span class="font-mono text-[10px] font-bold text-emerald">1</span>
+            </div>
+            <div>
+              <div class="font-display font-semibold text-body-lg text-on-surface mb-1">NetworkListener</div>
+              <p class="text-body-md text-on-surface-variant">POSIX UDP socket on port 8888 with SO_RCVBUF=8MB. Validates packet headers and routes to reassembler.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+              <span class="font-mono text-[10px] font-bold text-amber">2</span>
+            </div>
+            <div>
+              <div class="font-display font-semibold text-body-lg text-on-surface mb-1">FrameReassembler</div>
+              <p class="text-body-md text-on-surface-variant">Reconstructs fragmented encoded frames. Fires a LossCallback on 1000ms timeout — triggers keyframe request to iOS.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+              <span class="font-mono text-[10px] font-bold text-amber">3</span>
+            </div>
+            <div>
+              <div class="font-display font-semibold text-body-lg text-on-surface mb-1">JitterBuffer</div>
+              <p class="text-body-md text-on-surface-variant">Reorders out-of-sequence frames using the 32-bit sequence number from the packet header.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center" style="background:#0e0e0e; border: 0.5px solid #353534;">
+              <span class="font-mono text-[10px] font-bold text-emerald">4</span>
+            </div>
+            <div>
+              <div class="font-display font-semibold text-body-lg text-on-surface mb-1">VideoDecoder</div>
+              <p class="text-body-md text-on-surface-variant">FFmpeg with hardware acceleration decodes HEVC/H.264 and outputs frames via <code class="font-mono text-[12px] text-emerald">obs_source_output_video</code>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     QUALITY PRESETS
+════════════════════════════════════════════════════════════════════ -->
+<section class="py-24 lg:py-32 px-6 lg:px-12 max-w-7xl mx-auto">
+  <span class="section-label mb-4" data-animate>Quality Presets</span>
+  <h2 class="font-display text-display-md font-bold tracking-tight text-on-surface mb-12" data-animate>Pick your bandwidth. Not your battles.</h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-px" style="border: 0.5px solid #353534;">
+    <!-- Low -->
+    <div class="panel p-6 flex flex-col gap-4" data-animate>
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="data-label mb-1">Preset Low</div>
+          <h3 class="font-display text-display-sm font-bold tracking-tight text-on-surface">720p</h3>
+        </div>
+        <span class="font-mono text-[10px] text-on-surface-variant px-2 py-1 border border-[#353534]">30 fps</span>
+      </div>
+      <div class="hairline"></div>
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="data-label">Bitrate</span>
+          <span class="font-mono text-mono-md text-on-surface">4 Mbps</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">Resolution</span>
+          <span class="font-mono text-mono-md text-on-surface">1280 × 720</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">Codec</span>
+          <span class="font-mono text-mono-md text-on-surface">HEVC</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">GOP</span>
+          <span class="font-mono text-mono-md text-on-surface">2 s / 60 frames</span>
+        </div>
+      </div>
+      <p class="text-body-sm text-on-surface-variant">
+        Ideal for constrained networks or devices. Supports long streaming sessions with minimal thermal impact.
+      </p>
+    </div>
+
+    <!-- Medium -->
+    <div class="p-6 flex flex-col gap-4 relative" style="background:#201f1f; border: 0.5px solid #00e639; box-shadow: 0 0 20px rgba(0,230,57,0.06);" data-animate>
+      <div class="absolute top-3 right-3">
+        <span class="font-mono text-[9px] text-emerald border border-emerald px-1.5 py-0.5">RECOMMENDED</span>
+      </div>
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="data-label mb-1">Preset Medium</div>
+          <h3 class="font-display text-display-sm font-bold tracking-tight text-emerald">1080p</h3>
+        </div>
+        <span class="font-mono text-[10px] text-emerald px-2 py-1 border border-emerald">30 fps</span>
+      </div>
+      <div class="hairline" style="background-color: #353534;"></div>
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="data-label">Bitrate</span>
+          <span class="font-mono text-mono-md text-on-surface">8 Mbps</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">Resolution</span>
+          <span class="font-mono text-mono-md text-on-surface">1920 × 1080</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">Codec</span>
+          <span class="font-mono text-mono-md text-on-surface">HEVC</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">GOP</span>
+          <span class="font-mono text-mono-md text-on-surface">2 s / 60 frames</span>
+        </div>
+      </div>
+      <p class="text-body-sm text-on-surface-variant">
+        The sweet spot. Broadcast-quality video with moderate network demand. Works on standard home Wi-Fi.
+      </p>
+    </div>
+
+    <!-- High -->
+    <div class="panel p-6 flex flex-col gap-4" data-animate>
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="data-label mb-1">Preset High</div>
+          <h3 class="font-display text-display-sm font-bold tracking-tight text-on-surface">4K</h3>
+        </div>
+        <span class="font-mono text-[10px] text-amber px-2 py-1 border border-amber">60 fps</span>
+      </div>
+      <div class="hairline"></div>
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="data-label">Bitrate</span>
+          <span class="font-mono text-mono-md text-on-surface">50 Mbps</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">Resolution</span>
+          <span class="font-mono text-mono-md text-on-surface">3840 × 2160</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">Codec</span>
+          <span class="font-mono text-mono-md text-on-surface">HEVC</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="data-label">GOP</span>
+          <span class="font-mono text-mono-md text-on-surface">2 s / 120 frames</span>
+        </div>
+      </div>
+      <p class="text-body-sm text-on-surface-variant">
+        Maximum fidelity. Requires a strong 5GHz Wi-Fi connection. Designed for professional production environments.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     DOWNLOAD
+════════════════════════════════════════════════════════════════════ -->
+<section id="download" class="py-24 lg:py-32" style="background-color: #0a0a0a; border-top: 0.5px solid #353534;">
+  <div class="px-6 lg:px-12 max-w-7xl mx-auto text-center">
+    <span class="section-label justify-center mb-6" data-animate>Get Started</span>
+    <h2 class="font-display text-display-lg font-bold tracking-tight text-on-surface mb-4" data-animate>
+      Download Cams.
+    </h2>
+    <p class="text-body-lg text-on-surface-variant max-w-xl mx-auto mb-12" data-animate>
+      The iOS app and OBS plugin are free and open source. Build from source or grab the latest release.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-px max-w-2xl mx-auto" style="border: 0.5px solid #353534;" data-animate>
+      <!-- iOS -->
+      <div class="panel p-8 flex flex-col gap-4 items-start text-left">
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-[36px] text-on-surface">phone_iphone</span>
+          <div>
+            <div class="data-label">iOS App</div>
+            <div class="font-display text-headline-md font-semibold text-on-surface">Cams for iPhone</div>
+          </div>
+        </div>
+        <div class="hairline w-full"></div>
+        <ul class="space-y-1 text-body-sm text-on-surface-variant">
+          <li class="flex items-center gap-2"><div class="led led-emerald" style="width:4px;height:4px;"></div>iOS 16+ required</li>
+          <li class="flex items-center gap-2"><div class="led led-emerald" style="width:4px;height:4px;"></div>iPhone or iPad</li>
+          <li class="flex items-center gap-2"><div class="led led-emerald" style="width:4px;height:4px;"></div>Free</li>
+        </ul>
+        <div class="flex flex-col gap-2 w-full mt-auto">
+          <a href="#" class="btn-primary w-full justify-center">
+            <span class="material-symbols-outlined text-[16px]">apple</span>
+            App Store
+          </a>
+          <a href="https://github.com" class="btn-ghost w-full justify-center text-[10px]">
+            Build from Source
+          </a>
+        </div>
+      </div>
+
+      <!-- OBS Plugin -->
+      <div class="panel p-8 flex flex-col gap-4 items-start text-left">
+        <div class="flex items-center gap-3">
+          <span class="material-symbols-outlined text-[36px] text-emerald">extension</span>
+          <div>
+            <div class="data-label">OBS Plugin</div>
+            <div class="font-display text-headline-md font-semibold text-on-surface">obs-cams</div>
+          </div>
+        </div>
+        <div class="hairline w-full"></div>
+        <ul class="space-y-1 text-body-sm text-on-surface-variant">
+          <li class="flex items-center gap-2"><div class="led led-emerald" style="width:4px;height:4px;"></div>macOS · Windows · Linux</li>
+          <li class="flex items-center gap-2"><div class="led led-emerald" style="width:4px;height:4px;"></div>OBS Studio 30+</li>
+          <li class="flex items-center gap-2"><div class="led led-emerald" style="width:4px;height:4px;"></div>Free &amp; Open Source</li>
+        </ul>
+        <div class="flex flex-col gap-2 w-full mt-auto">
+          <a href="https://github.com" class="btn-primary w-full justify-center">
+            <span class="material-symbols-outlined text-[16px]">download</span>
+            Latest Release
+          </a>
+          <a href="docs.html#build" class="btn-ghost w-full justify-center text-[10px]">
+            Build from Source
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Build command preview -->
+    <div class="mt-8 max-w-2xl mx-auto" data-animate>
+      <div class="code-block text-left">
+        <span class="cm"># macOS — configure and build</span><br/>
+        <span class="kw">cd</span> obs-plugin<br/>
+        cmake -B build -DOBS_SDK_ROOT=<span class="str">/path/to/obs-studio</span> \<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-DFFMPEG_ROOT=<span class="str">/opt/homebrew</span><br/>
+        cmake --build build --parallel<br/>
+        cmake --install build<br/>
+        <br/>
+        <span class="cm"># Run tests without OBS/FFmpeg</span><br/>
+        cmake -S . -B build -DBUILD_PLUGIN=<span class="num">OFF</span> -DBUILD_TESTS=<span class="num">ON</span><br/>
+        cmake --build build &amp;&amp; ctest --test-dir build --output-on-failure
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     FOOTER
+════════════════════════════════════════════════════════════════════ -->
+<footer class="py-12 px-6 lg:px-12" style="border-top: 0.5px solid #353534;">
+  <div class="max-w-7xl mx-auto">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+      <!-- Brand -->
+      <div class="md:col-span-2">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="material-symbols-outlined text-emerald text-[18px]">sensors</span>
+          <span class="font-mono text-[13px] font-bold tracking-[0.14em] uppercase text-on-surface">CAMS</span>
+        </div>
+        <p class="text-body-sm text-on-surface-variant max-w-xs leading-relaxed">
+          Wireless iOS camera source for OBS Studio. Open source. Built for professionals.
+        </p>
+        <div class="flex gap-3 mt-4">
+          <a href="https://github.com" class="btn-ghost text-[9px] px-3 py-1.5">GitHub</a>
+          <a href="docs.html" class="btn-ghost text-[9px] px-3 py-1.5">Docs</a>
+        </div>
+      </div>
+      <!-- Links -->
+      <div>
+        <div class="data-label mb-4">Product</div>
+        <ul class="space-y-2">
+          <li><a href="#features"  class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Features</a></li>
+          <li><a href="#protocol"  class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Protocol</a></li>
+          <li><a href="#download"  class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Download</a></li>
+          <li><a href="docs.html"  class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Documentation</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="data-label mb-4">Legal</div>
+        <ul class="space-y-2">
+          <li><a href="privacy.html" class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Privacy Policy</a></li>
+          <li><a href="terms.html"   class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="hairline mb-6"></div>
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+      <span class="font-mono text-[10px] text-on-surface-variant tracking-widest">
+        © 2025 CAMS PROJECT · OPEN SOURCE · MIT LICENSE
+      </span>
+      <span class="font-mono text-[10px] text-on-surface-variant">
+        Protocol v2.0 · 21-byte header · UDP 8888/8889
+      </span>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="./src/scripts/main.js"></script>
+</body>
+</html>

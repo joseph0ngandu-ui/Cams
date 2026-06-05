@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cams Privacy Policy — how we handle your data." />
+  <title>CAMS — Privacy Policy</title>
+  <link rel="stylesheet" href="./src/styles/main.css" />
+</head>
+<body class="bg-surface-lowest text-on-surface font-body">
+
+<!-- Nav -->
+<nav class="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-6" style="border-bottom: 0.5px solid #353534; background: rgba(14,14,14,0.95); backdrop-filter: blur(12px);">
+  <a href="/" class="flex items-center gap-2 text-on-surface hover:text-white transition-colors">
+    <span class="material-symbols-outlined text-[18px] text-emerald">sensors</span>
+    <span class="font-mono text-[13px] font-bold tracking-[0.14em] uppercase">CAMS</span>
+  </a>
+  <div class="hidden md:flex items-center gap-6">
+    <a href="/#features" class="nav-link">Features</a>
+    <a href="docs.html"  class="nav-link">Docs</a>
+  </div>
+  <a href="/#download" class="btn-primary text-[10px] hidden md:flex">
+    <span class="material-symbols-outlined text-[14px]">download</span>
+    Download
+  </a>
+</nav>
+
+<div class="pt-12 min-h-screen">
+  <main class="max-w-3xl mx-auto px-6 lg:px-8 py-16">
+
+    <!-- Header -->
+    <div class="mb-12">
+      <span class="section-label mb-3">Legal</span>
+      <h1 class="font-display text-display-lg font-bold tracking-tight text-on-surface mt-4 mb-3">Privacy Policy</h1>
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-[10px] text-on-surface-variant border border-[#353534] px-2 py-1">Effective: 1 June 2025</span>
+        <span class="font-mono text-[10px] text-on-surface-variant border border-[#353534] px-2 py-1">Version 1.0</span>
+      </div>
+    </div>
+
+    <div class="hairline mb-8"></div>
+
+    <!-- Content -->
+    <div class="prose-cams space-y-10">
+
+      <!-- TL;DR -->
+      <div class="panel p-5 flex items-start gap-3">
+        <span class="material-symbols-outlined text-emerald text-[20px] mt-0.5 flex-shrink-0">verified_user</span>
+        <div>
+          <div class="data-label mb-1">Summary</div>
+          <p class="text-body-md text-on-surface-variant">
+            Cams does not collect, store, or transmit any personal data to external servers. All video, audio, and control data stays on your local network. The app has no analytics, no crash reporting to third parties, and no user accounts.
+          </p>
+        </div>
+      </div>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">1. What Cams Is</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed mb-3">
+          Cams is an iOS application that captures video from your device camera and streams it to OBS Studio over your local Wi-Fi network using a custom UDP protocol. Cams also includes an OBS Studio plugin that receives this stream.
+        </p>
+        <p class="text-body-md text-on-surface-variant leading-relaxed">
+          Cams is free and open source software, distributed under the MIT License. The source code is publicly available at our GitHub repository.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">2. Data We Do Not Collect</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed mb-4">
+          Cams does not collect any of the following:
+        </p>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            Video or audio content from your camera
+          </div>
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            Personal identifiers (name, email address, Apple ID, device ID)
+          </div>
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            Location data
+          </div>
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            Usage analytics or behavioral telemetry
+          </div>
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            Crash reports sent to external services
+          </div>
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            IP addresses of your devices
+          </div>
+          <div class="flex items-center gap-3 text-body-md text-on-surface-variant">
+            <div class="led" style="width:5px;height:5px;background:#93000a;border-radius:50%;flex-shrink:0;"></div>
+            Network topology information
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">3. How Video Data Is Handled</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed mb-3">
+          Video captured by the iOS app is encoded using the device's hardware VideoToolbox encoder (HEVC or H.264) entirely on-device. The encoded stream is transmitted as UDP packets directly from the iOS device to the OBS Studio instance on the same local network.
+        </p>
+        <p class="text-body-md text-on-surface-variant leading-relaxed mb-3">
+          No video data is transmitted to any server, cloud service, relay, or third party at any point. The data path is exclusively:
+        </p>
+        <div class="code-block mb-3">
+          iPhone camera → VideoToolbox encoder → UDP → OBS Studio (local network)
+        </div>
+        <p class="text-body-md text-on-surface-variant leading-relaxed">
+          Cams does not store, buffer to disk, or log any video data on either the iOS device or the machine running OBS.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">4. System Permissions</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed mb-4">Cams requests the following iOS system permissions. All are required for core functionality and none grant us access to your data.</p>
+        <div class="space-y-3">
+          <div class="panel p-4">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="material-symbols-outlined text-emerald text-[16px]">photo_camera</span>
+              <span class="font-display font-semibold text-body-md text-on-surface">Camera</span>
+            </div>
+            <p class="text-body-sm text-on-surface-variant">Required to capture video frames. We never access your Camera Roll, photos, or any previously captured media.</p>
+          </div>
+          <div class="panel p-4">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="material-symbols-outlined text-emerald text-[16px]">wifi</span>
+              <span class="font-display font-semibold text-body-md text-on-surface">Local Network</span>
+            </div>
+            <p class="text-body-sm text-on-surface-variant">Required to publish a Bonjour service so OBS can discover the device, and to send UDP packets to OBS on the same network. We never communicate beyond your local network.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">5. Third-Party Services</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed mb-3">
+          Cams does not integrate with any third-party SDKs, analytics platforms, advertising networks, or crash-reporting services. The application has no internet-facing network connections other than the local UDP streams described above.
+        </p>
+        <p class="text-body-md text-on-surface-variant leading-relaxed">
+          This website is hosted as a static site. Standard web server access logs may be maintained by the hosting provider. We do not use cookies, JavaScript tracking, or any analytics on this site.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">6. Children's Privacy</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed">
+          Cams does not knowingly collect any personal information from anyone, including children under 13. Because we collect no data, we are COPPA-compliant by design.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">7. Changes to This Policy</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed">
+          If we ever change this policy in a material way (for example, if a future version of Cams added cloud features), we will update the Effective Date above and note the changes in the application release notes. Continued use of the application after the update constitutes acceptance of the revised policy.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-headline-lg font-semibold text-on-surface mb-4 pb-2" style="border-bottom: 0.5px solid #353534;">8. Contact</h2>
+        <p class="text-body-md text-on-surface-variant leading-relaxed">
+          Questions about this policy can be directed to us via a GitHub Issue at the Cams repository. We do not maintain a dedicated privacy email address because we collect no personal data to inquire about.
+        </p>
+      </section>
+
+    </div>
+
+    <!-- Navigation -->
+    <div class="hairline mt-12 mb-6"></div>
+    <div class="flex gap-4">
+      <a href="/" class="btn-ghost text-[10px]">
+        <span class="material-symbols-outlined text-[14px]">arrow_back</span>
+        Home
+      </a>
+      <a href="terms.html" class="btn-ghost text-[10px]">Terms of Service</a>
+    </div>
+
+  </main>
+</div>
+
+<footer class="py-8 px-6" style="border-top: 0.5px solid #353534;">
+  <div class="max-w-3xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+    <span class="font-mono text-[10px] text-on-surface-variant tracking-widest uppercase">© 2025 Cams Project · MIT License</span>
+    <div class="flex gap-4">
+      <a href="/" class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Home</a>
+      <a href="terms.html" class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Terms</a>
+      <a href="docs.html"  class="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Docs</a>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="./src/scripts/main.js"></script>
+</body>
+</html>

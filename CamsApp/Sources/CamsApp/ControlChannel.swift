@@ -23,6 +23,8 @@ public protocol ControlChannelDelegate: AnyObject, Sendable {
     func controlChannelDidRequestKeyframe(_ channel: ControlChannel)
     /// The OBS plugin has requested a video quality preset.
     func controlChannel(_ channel: ControlChannel, didRequestQuality quality: StreamQuality)
+    /// The OBS plugin has requested a Center Stage enable/disable.
+    func controlChannel(_ channel: ControlChannel, didSetCenterStageEnabled enabled: Bool)
     /// The OBS plugin has sent a control packet, revealing its host endpoint.
     func controlChannel(_ channel: ControlChannel, didDiscoverOBSEndpoint host: String, port: UInt16)
     /// A control command failed locally before it could be applied.
@@ -194,6 +196,13 @@ public final class ControlChannel: @unchecked Sendable {
         case .setAudioEnabled:
             // Reserved for a future audio-capable protocol revision.
             break
+
+        case .setCenterStageEnabled:
+            let enabled = packet.payload.first == 0x01
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.delegate?.controlChannel(self, didSetCenterStageEnabled: enabled)
+            }
 
         case .ping:
             // Reply with a pong on the same connection.

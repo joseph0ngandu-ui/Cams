@@ -440,6 +440,51 @@ TEST(test_control_ping_receives_matching_pong) {
     receiver.stop();
 }
 
+TEST(test_center_stage_control_packet_serialization) {
+    // SetCenterStageEnabled = 0x0A; payload 0x01 = enable, 0x00 = disable.
+    cams::ControlPacket enable{cams::ControlCommand::SetCenterStageEnabled, {0x01}};
+    auto enableBytes = enable.serialise();
+    ASSERT_EQ(enableBytes.size(), 2u);
+    ASSERT_EQ(enableBytes[0], 0x0A);
+    ASSERT_EQ(enableBytes[1], 0x01);
+
+    auto parsed = cams::ControlPacket::deserialise(enableBytes.data(), enableBytes.size());
+    ASSERT_TRUE(parsed.has_value());
+    ASSERT_TRUE(parsed->command == cams::ControlCommand::SetCenterStageEnabled);
+    ASSERT_EQ(parsed->payload.size(), 1u);
+    ASSERT_EQ(parsed->payload[0], 0x01);
+
+    // Disable path.
+    cams::ControlPacket disable{cams::ControlCommand::SetCenterStageEnabled, {0x00}};
+    auto disableBytes = disable.serialise();
+    ASSERT_EQ(disableBytes[0], 0x0A);
+    ASSERT_EQ(disableBytes[1], 0x00);
+}
+
+TEST(test_reassembler_loss_triggers_keyframe_callback) {
+    cams::FrameReassembler reassembler;
+
+    int callbackCount = 0;
+    reassembler.setLossCallback([&callbackCount]() {
+        ++callbackCount;
+    });
+
+    auto payload = std::vector<uint8_t>{0xAA, 0xBB};
+    // Push an incomplete 2-fragment frame (only fragment 0 arrives).
+    reassembler.push(
+        makeFragment(77, 500, cams::FrameType::H264, 0, 2, payload.size()),
+        payload,
+        100
+    );
+
+    // Expire with nowMs well past the 1000 ms timeout.
+    auto reasons = reassembler.expire(1200);
+
+    ASSERT_EQ(reasons.size(), 1u);
+    ASSERT_EQ(callbackCount, 1);
+    ASSERT_EQ(reassembler.pendingFrameCount(), 0u);
+}
+
 TEST(test_control_ping_ignores_mismatched_pong_token) {
     cams::ControlServer sender;
     ASSERT_TRUE(sender.start(0));
@@ -483,6 +528,8 @@ int main() {
     RUN(test_reassembler_rejects_payload_length_mismatch); prevFailed = g_failed;
     RUN(test_control_ping_receives_matching_pong); prevFailed = g_failed;
     RUN(test_control_ping_ignores_mismatched_pong_token); prevFailed = g_failed;
+    RUN(test_center_stage_control_packet_serialization); prevFailed = g_failed;
+    RUN(test_reassembler_loss_triggers_keyframe_callback); prevFailed = g_failed;
 
     fprintf(stdout, "\nResults: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

@@ -84,6 +84,11 @@ void ControlServer::sendQuality(int qualityPreset) {
     }
 }
 
+void ControlServer::sendCenterStageEnabled(bool enabled) {
+    std::vector<uint8_t> payload = { enabled ? uint8_t(0x01) : uint8_t(0x00) };
+    sendCommand(ControlCommand::SetCenterStageEnabled, payload);
+}
+
 std::optional<double> ControlServer::ping(int timeoutMs) {
     if (m_socket == INVALID_SOCK) return std::nullopt;
 

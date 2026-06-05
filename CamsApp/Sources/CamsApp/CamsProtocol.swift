@@ -77,6 +77,8 @@ public enum ControlCommand: UInt8, Sendable {
     case setQualityHigh  = 0x08
     /// Reserved for future audio transport; ignored by video-only v1.
     case setAudioEnabled = 0x09
+    /// Enable or disable subject tracking (Center Stage). Payload: 1 byte — 0x00=disabled, 0x01=enabled.
+    case setCenterStageEnabled = 0x0A
     /// Ping — used to measure round-trip latency.
     case ping          = 0xFE
     /// Pong — response to a ping.
